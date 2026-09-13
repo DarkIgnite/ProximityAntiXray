@@ -10,6 +10,9 @@ import io.papermc.paper.antixray.ChunkPacketInfo;
 import io.papermc.paper.configuration.WorldConfiguration;
 import io.papermc.paper.configuration.type.EngineMode;
 import java.lang.reflect.Field;
+import java.lang.reflect.Method;
+import net.minecraft.core.Holder;
+import net.minecraft.resources.ResourceKey;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -175,7 +178,7 @@ public final class ChunkPacketBlockControllerAntiXray extends ChunkPacketBlockCo
             }
         }
 
-        EmptyLevelChunk emptyChunk = new EmptyLevelChunk(level, new ChunkPos(0, 0), MinecraftServer.getServer().registryAccess().lookupOrThrow(Registries.BIOME).getOrThrow(Biomes.PLAINS));
+        EmptyLevelChunk emptyChunk = createEmptyChunk(level);
         BlockPos zeroPos = new BlockPos(0, 0, 0);
 
         for (int i = 0; i < solidGlobal.length; i++) {
@@ -191,6 +194,30 @@ public final class ChunkPacketBlockControllerAntiXray extends ChunkPacketBlockCo
         }
 
         maxBlockHeightUpdatePosition = maxBlockHeight + updateRadius - 1;
+    }
+
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    private static EmptyLevelChunk createEmptyChunk(Level level) {
+        try {
+            Object registryAccess = MinecraftServer.getServer().registryAccess();
+            Method lookupMethod = registryAccess.getClass().getMethod("lookupOrThrow", ResourceKey.class);
+            Object biomeRegistry = lookupMethod.invoke(registryAccess, Registries.BIOME);
+            Method getOrThrowMethod = biomeRegistry.getClass().getMethod("getOrThrow", ResourceKey.class);
+            Holder plainsBiome = (Holder) getOrThrowMethod.invoke(biomeRegistry, Biomes.PLAINS);
+            return new EmptyLevelChunk(level, new ChunkPos(0, 0), plainsBiome);
+        } catch (Throwable t) {
+            try {
+                Object registryAccess = MinecraftServer.getServer().registryAccess();
+                Method lookupMethod = registryAccess.getClass().getMethod("lookup", ResourceKey.class);
+                java.util.Optional<?> opt = (java.util.Optional<?>) lookupMethod.invoke(registryAccess, Registries.BIOME);
+                Object biomeRegistry = opt.orElseThrow();
+                Method getOrThrowMethod = biomeRegistry.getClass().getMethod("getOrThrow", ResourceKey.class);
+                Holder plainsBiome = (Holder) getOrThrowMethod.invoke(biomeRegistry, Biomes.PLAINS);
+                return new EmptyLevelChunk(level, new ChunkPos(0, 0), plainsBiome);
+            } catch (Throwable t2) {
+                throw new RuntimeException("Failed to initialize EmptyLevelChunk for ProximityAntiXray", t2);
+            }
+        }
     }
 
     private int getPresetBlockStatesFullLength() {
