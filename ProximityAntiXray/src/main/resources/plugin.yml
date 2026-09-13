@@ -1,0 +1,16 @@
+name: ProximityAntiXray
+main: com.darkignite.proximityantixray.ProximityAntiXray
+version: 1.0.0
+api-version: '1.21'
+description: Ultra-lightweight proximity-based spawner and structure hider against Freecam and ESP.
+author: DarkIgnite
+load: STARTUP
+depend:
+  - ProtocolLib
+commands:
+  proximityantixray:
+    description: ProximityAntiXray main command
+    permission: proximityantixray.admin
+    aliases:
+      - panti
+      - panti-xray
