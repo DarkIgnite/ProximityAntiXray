@@ -26,10 +26,10 @@ world-settings:
     # Whether to completely fill the dungeon structure (air, cobblestone, chests, mossy cobble) with solid stone
     # so Freecam / Spectator sees 100% solid underground rock instead of a hollow room!
     fill-dungeon-with-stone: true
-    # Radius around the spawner to conceal as solid stone
-    dungeon-horizontal-radius: 3
-    dungeon-vertical-radius-up: 3
-    dungeon-vertical-radius-down: 1
+    # Radius around the spawner to conceal as solid stone (covers up to 9x9 dungeon rooms)
+    dungeon-horizontal-radius: 4
+    dungeon-vertical-radius-up: 4
+    dungeon-vertical-radius-down: 2
 
     # Blocks that are hidden and revealed only by close physical proximity
     # Leave empty [] to inherit all hidden-blocks from Paper config

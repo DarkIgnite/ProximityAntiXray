@@ -1,0 +1,11 @@
+api-version: "1.20"
+name: Veinminer
+version: 2.5.3
+main: de.miraculixx.veinminer.Veinminer
+bootstrapper: de.miraculixx.veinminer.VeinminerBootstrapper
+loader: de.miraculixx.veinminer.VeinminerLoader
+description: Mine the whole vein at the same time with a single block break
+load: STARTUP
+author: "Miraculixx, Max Bossing"
+website: https://mutils.net
+folia-supported: true

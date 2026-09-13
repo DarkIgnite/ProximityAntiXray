@@ -89,7 +89,13 @@ public final class PacketListener extends PacketAdapter {
             chunkBlocks = new ChunkBlocks(chunk, new HashMap<>(chunkBlocks.getBlocks()));
             playerData.getChunks().put(chunkBlocks.getKey(), chunkBlocks);
 
-            plugin.sendInitialDungeonConceal(player, chunkBlocks);
+            ChunkBlocks cb = chunkBlocks;
+            Runnable concealTask = () -> plugin.sendInitialDungeonConceal(player, cb);
+            if (plugin.isFolia()) {
+                player.getScheduler().runDelayed(plugin, (t) -> concealTask.run(), null, 1L);
+            } else {
+                plugin.getServer().getScheduler().runTaskLater(plugin, concealTask, 1L);
+            }
         } else if (packetType == PacketType.Play.Server.UNLOAD_CHUNK) {
             Player player = event.getPlayer();
             PlayerData playerData = plugin.getPlayerData().get(player.getUniqueId());

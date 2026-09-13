@@ -247,7 +247,7 @@ public final class ProximityAntiXray extends JavaPlugin {
         double revealDist = getConfig().getDouble("world-settings." + world.getName() + ".reveal-distance", getConfig().getDouble("world-settings.default.reveal-distance", 6.0));
         double revealDistSq = revealDist * revealDist;
 
-        boolean written = false;
+        int count = 0;
         for (java.util.Map.Entry<BlockPos, Boolean> entry : chunkBlocks.getBlocks().entrySet()) {
             if (entry.getValue()) {
                 BlockPos pos = entry.getKey();
@@ -257,13 +257,14 @@ public final class ProximityAntiXray extends JavaPlugin {
                 if (dx * dx + dy * dy + dz * dz > revealDistSq) {
                     BlockState fakeState = pos.getY() < 0 ? Blocks.DEEPSLATE.defaultBlockState() : Blocks.STONE.defaultBlockState();
                     channel.write(new ClientboundBlockUpdatePacket(pos, fakeState));
-                    written = true;
+                    count++;
                 }
             }
         }
 
-        if (written) {
+        if (count > 0) {
             channel.flush();
+            getLogger().info("[DungeonConceal] Sent " + count + " conceal packets to " + player.getName());
         }
     }
 

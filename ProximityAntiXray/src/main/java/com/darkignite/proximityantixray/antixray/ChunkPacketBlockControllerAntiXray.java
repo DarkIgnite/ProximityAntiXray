@@ -501,21 +501,20 @@ public final class ChunkPacketBlockControllerAntiXray extends ChunkPacketBlockCo
         if (plugin.isFillDungeonWithStone(chunk.getLevel().getWorld())) {
             for (net.minecraft.world.level.block.entity.BlockEntity be : chunk.getBlockEntities().values()) {
                 if (be instanceof net.minecraft.world.level.block.entity.SpawnerBlockEntity) {
-                    BlockPos spawnerPos = be.getBlockPos();
-                    int sx = spawnerPos.getX(), sy = spawnerPos.getY(), sz = spawnerPos.getZ();
-                    int hr = plugin.getDungeonHorizontalRadius(chunk.getLevel().getWorld());
-                    int vu = plugin.getDungeonVerticalRadiusUp(chunk.getLevel().getWorld());
-                    int vd = plugin.getDungeonVerticalRadiusDown(chunk.getLevel().getWorld());
-                    for (int dx = -hr; dx <= hr; dx++) {
-                        for (int dz = -hr; dz <= hr; dz++) {
-                            for (int dy = -vd; dy <= vu; dy++) {
-                                BlockPos tPos = new BlockPos(sx + dx, sy + dy, sz + dz);
-                                BlockState st = level.getBlockState(tPos);
-                                if (st.isAir() || st.is(Blocks.COBBLESTONE) || st.is(Blocks.MOSSY_COBBLESTONE) || st.is(Blocks.CHEST) || st.is(Blocks.SPAWNER)) {
-                                    blocks.put(tPos, true);
-                                    if (st.hasBlockEntity()) {
-                                        blockEntities.add(tPos);
-                                    }
+                    concealDungeon(level, be.getBlockPos(), blocks, blockEntities);
+                }
+            }
+            if (chunkPacketInfoAntiXray.getNearbyChunks() != null) {
+                for (LevelChunk nearby : chunkPacketInfoAntiXray.getNearbyChunks()) {
+                    if (nearby != null) {
+                        for (net.minecraft.world.level.block.entity.BlockEntity be : nearby.getBlockEntities().values()) {
+                            if (be instanceof net.minecraft.world.level.block.entity.SpawnerBlockEntity) {
+                                BlockPos sp = be.getBlockPos();
+                                int hr = plugin.getDungeonHorizontalRadius(chunk.getLevel().getWorld());
+                                ChunkPos cp = chunk.getPos();
+                                if (sp.getX() >= cp.getMinBlockX() - hr && sp.getX() <= cp.getMaxBlockX() + hr &&
+                                    sp.getZ() >= cp.getMinBlockZ() - hr && sp.getZ() <= cp.getMaxBlockZ() + hr) {
+                                    concealDungeon(level, sp, blocks, blockEntities);
                                 }
                             }
                         }
@@ -551,6 +550,30 @@ public final class ChunkPacketBlockControllerAntiXray extends ChunkPacketBlockCo
         }
 
         chunkPacketInfoAntiXray.getChunkPacket().setReady(true);
+    }
+
+    private void concealDungeon(Level level, BlockPos spawnerPos, Map<? super BlockPos, ? super Boolean> blocks, Set<? super BlockPos> blockEntities) {
+        int sx = spawnerPos.getX(), sy = spawnerPos.getY(), sz = spawnerPos.getZ();
+        int hr = plugin.getDungeonHorizontalRadius(level.getWorld());
+        int vu = plugin.getDungeonVerticalRadiusUp(level.getWorld());
+        int vd = plugin.getDungeonVerticalRadiusDown(level.getWorld());
+        int count = 0;
+        for (int dx = -hr; dx <= hr; dx++) {
+            for (int dz = -hr; dz <= hr; dz++) {
+                for (int dy = -vd; dy <= vu; dy++) {
+                    BlockPos tPos = new BlockPos(sx + dx, sy + dy, sz + dz);
+                    BlockState st = level.getBlockState(tPos);
+                    if (!st.is(Blocks.STONE) && !st.is(Blocks.DEEPSLATE) && !st.is(Blocks.BEDROCK)) {
+                        blocks.put(tPos, true);
+                        if (st.hasBlockEntity()) {
+                            blockEntities.add(tPos);
+                        }
+                        count++;
+                    }
+                }
+            }
+        }
+        plugin.getLogger().info("[DungeonConceal] Spawner at (" + sx + ", " + sy + ", " + sz + ") - Concealed " + count + " blocks around it as solid stone.");
     }
 
     private void obfuscateLayer(ChunkPos chunkPos, int minSectionY, int chunkSectionIndex, int y, BitStorageReader bitStorageReader, BitStorageWriter bitStorageWriter, boolean[] solid, boolean[] obfuscate, boolean[] trace, boolean[] blockEntity, int[] presetBlockStateBits, boolean[][] current, boolean[][] next, boolean[][] nextNext, boolean[][] traceCache, boolean[][] blockEntityCache, LevelChunkSection[] nearbyChunkSections, IntSupplier random, Map<? super BlockPos, ? super Boolean> blocks, Set<? super BlockPos> blockEntities) {
