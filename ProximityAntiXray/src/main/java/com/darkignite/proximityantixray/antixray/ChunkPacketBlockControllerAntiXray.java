@@ -498,6 +498,32 @@ public final class ChunkPacketBlockControllerAntiXray extends ChunkPacketBlockCo
             }
         }
 
+        if (plugin.isFillDungeonWithStone(chunk.getLevel().getWorld())) {
+            for (net.minecraft.world.level.block.entity.BlockEntity be : chunk.getBlockEntities().values()) {
+                if (be instanceof net.minecraft.world.level.block.entity.SpawnerBlockEntity) {
+                    BlockPos spawnerPos = be.getBlockPos();
+                    int sx = spawnerPos.getX(), sy = spawnerPos.getY(), sz = spawnerPos.getZ();
+                    int hr = plugin.getDungeonHorizontalRadius(chunk.getLevel().getWorld());
+                    int vu = plugin.getDungeonVerticalRadiusUp(chunk.getLevel().getWorld());
+                    int vd = plugin.getDungeonVerticalRadiusDown(chunk.getLevel().getWorld());
+                    for (int dx = -hr; dx <= hr; dx++) {
+                        for (int dz = -hr; dz <= hr; dz++) {
+                            for (int dy = -vd; dy <= vu; dy++) {
+                                BlockPos tPos = new BlockPos(sx + dx, sy + dy, sz + dz);
+                                BlockState st = level.getBlockState(tPos);
+                                if (st.isAir() || st.is(Blocks.COBBLESTONE) || st.is(Blocks.MOSSY_COBBLESTONE) || st.is(Blocks.CHEST) || st.is(Blocks.SPAWNER)) {
+                                    blocks.put(tPos, true);
+                                    if (st.hasBlockEntity()) {
+                                        blockEntities.add(tPos);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         if (plugin.isRunning()) {
             plugin.getPacketChunkBlocksCache().put(chunkPacketInfoAntiXray.getChunkPacket(), new ChunkBlocks(chunkPacketInfoAntiXray.getChunk(), blocks));
         }

@@ -88,6 +88,8 @@ public final class PacketListener extends PacketAdapter {
 
             chunkBlocks = new ChunkBlocks(chunk, new HashMap<>(chunkBlocks.getBlocks()));
             playerData.getChunks().put(chunkBlocks.getKey(), chunkBlocks);
+
+            plugin.sendInitialDungeonConceal(player, chunkBlocks);
         } else if (packetType == PacketType.Play.Server.UNLOAD_CHUNK) {
             Player player = event.getPlayer();
             PlayerData playerData = plugin.getPlayerData().get(player.getUniqueId());

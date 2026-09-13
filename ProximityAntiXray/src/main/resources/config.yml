@@ -20,8 +20,17 @@ world-settings:
     rehide-distance: 8.0
     # Whether to re-hide the block when the player leaves the radius
     rehide-blocks: true
-    # Maximum number of hidden/proximity-tracked blocks per chunk
+    # Maximum number of hidden/proximity-tracked blocks per chunk (without dungeon blocks)
     max-blocks-per-chunk: 60
+
+    # Whether to completely fill the dungeon structure (air, cobblestone, chests, mossy cobble) with solid stone
+    # so Freecam / Spectator sees 100% solid underground rock instead of a hollow room!
+    fill-dungeon-with-stone: true
+    # Radius around the spawner to conceal as solid stone
+    dungeon-horizontal-radius: 3
+    dungeon-vertical-radius-up: 3
+    dungeon-vertical-radius-down: 1
+
     # Blocks that are hidden and revealed only by close physical proximity
     # Leave empty [] to inherit all hidden-blocks from Paper config
     proximity-blocks:

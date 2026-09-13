@@ -12,6 +12,7 @@ import java.util.logging.Logger;
 import org.bukkit.World;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.craftbukkit.CraftWorld;
+import org.bukkit.craftbukkit.entity.CraftPlayer;
 import org.bukkit.entity.Player;
 import org.bukkit.plugin.PluginManager;
 import org.bukkit.plugin.java.JavaPlugin;
@@ -29,9 +30,15 @@ import com.darkignite.proximityantixray.listeners.WorldListener;
 import com.darkignite.proximityantixray.tasks.ProximityTimerTask;
 import com.darkignite.proximityantixray.tasks.UpdateBukkitRunnable;
 
+import io.netty.channel.Channel;
 import io.papermc.paper.configuration.WorldConfiguration.Anticheat.AntiXray;
 import io.papermc.paper.configuration.type.EngineMode;
+import net.minecraft.core.BlockPos;
+import net.minecraft.network.protocol.game.ClientboundBlockUpdatePacket;
 import net.minecraft.network.protocol.game.ClientboundLevelChunkWithLightPacket;
+import net.minecraft.server.network.ServerGamePacketListenerImpl;
+import net.minecraft.world.level.block.Blocks;
+import net.minecraft.world.level.block.state.BlockState;
 
 public final class ProximityAntiXray extends JavaPlugin {
     private boolean folia = false;
@@ -90,6 +97,7 @@ public final class ProximityAntiXray extends JavaPlugin {
         getLogger().info("=========================================");
         getLogger().info(" ProximityAntiXray v" + getPluginMeta().getVersion() + " by " + String.join(", ", getPluginMeta().getAuthors()));
         getLogger().info(" Ultra-lightweight proximity hider enabled!");
+        getLogger().info(" Dungeon stone concealer: " + (config.getBoolean("world-settings.default.fill-dungeon-with-stone", true) ? "ACTIVE" : "DISABLED"));
         getLogger().info("=========================================");
     }
 
@@ -194,6 +202,69 @@ public final class ProximityAntiXray extends JavaPlugin {
         }
 
         return false;
+    }
+
+    public boolean isFillDungeonWithStone(World world) {
+        FileConfiguration config = getConfig();
+        return config.getBoolean("world-settings." + world.getName() + ".fill-dungeon-with-stone", config.getBoolean("world-settings.default.fill-dungeon-with-stone", true));
+    }
+
+    public int getDungeonHorizontalRadius(World world) {
+        FileConfiguration config = getConfig();
+        return config.getInt("world-settings." + world.getName() + ".dungeon-horizontal-radius", config.getInt("world-settings.default.dungeon-horizontal-radius", 3));
+    }
+
+    public int getDungeonVerticalRadiusUp(World world) {
+        FileConfiguration config = getConfig();
+        return config.getInt("world-settings." + world.getName() + ".dungeon-vertical-radius-up", config.getInt("world-settings.default.dungeon-vertical-radius-up", 3));
+    }
+
+    public int getDungeonVerticalRadiusDown(World world) {
+        FileConfiguration config = getConfig();
+        return config.getInt("world-settings." + world.getName() + ".dungeon-vertical-radius-down", config.getInt("world-settings.default.dungeon-vertical-radius-down", 1));
+    }
+
+    public void sendInitialDungeonConceal(Player player, ChunkBlocks chunkBlocks) {
+        World world = player.getWorld();
+        if (!isEnabled(world) || !isFillDungeonWithStone(world)) {
+            return;
+        }
+
+        ServerGamePacketListenerImpl connection = ((CraftPlayer) player).getHandle().connection;
+        if (connection == null || connection.processedDisconnect) {
+            return;
+        }
+
+        Channel channel = connection.connection.channel;
+        if (channel == null || !channel.isOpen()) {
+            return;
+        }
+
+        double px = player.getLocation().getX();
+        double py = player.getLocation().getY();
+        double pz = player.getLocation().getZ();
+
+        double revealDist = getConfig().getDouble("world-settings." + world.getName() + ".reveal-distance", getConfig().getDouble("world-settings.default.reveal-distance", 6.0));
+        double revealDistSq = revealDist * revealDist;
+
+        boolean written = false;
+        for (java.util.Map.Entry<BlockPos, Boolean> entry : chunkBlocks.getBlocks().entrySet()) {
+            if (entry.getValue()) {
+                BlockPos pos = entry.getKey();
+                double dx = px - (pos.getX() + 0.5);
+                double dy = py - (pos.getY() + 0.5);
+                double dz = pz - (pos.getZ() + 0.5);
+                if (dx * dx + dy * dy + dz * dz > revealDistSq) {
+                    BlockState fakeState = pos.getY() < 0 ? Blocks.DEEPSLATE.defaultBlockState() : Blocks.STONE.defaultBlockState();
+                    channel.write(new ClientboundBlockUpdatePacket(pos, fakeState));
+                    written = true;
+                }
+            }
+        }
+
+        if (written) {
+            channel.flush();
+        }
     }
 
     public boolean validatePlayer(Player player) {

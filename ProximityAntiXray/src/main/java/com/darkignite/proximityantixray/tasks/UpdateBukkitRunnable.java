@@ -75,6 +75,18 @@ public final class UpdateBukkitRunnable extends BukkitRunnable implements Consum
         Queue<Result> results = playerData.getResults();
         Result result;
 
+        ServerGamePacketListenerImpl connection = ((CraftPlayer) player).getHandle().connection;
+        if (connection == null || connection.processedDisconnect) {
+            return;
+        }
+
+        Channel channel = connection.connection.channel;
+        if (channel == null || !channel.isOpen()) {
+            return;
+        }
+
+        boolean written = false;
+
         while ((result = results.poll()) != null) {
             ChunkBlocks chunkBlocks = result.getChunkBlocks();
 
@@ -107,32 +119,21 @@ public final class UpdateBukkitRunnable extends BukkitRunnable implements Consum
                 blockState = Blocks.STONE.defaultBlockState();
             }
 
-            sendPacketImmediately(player, new ClientboundBlockUpdatePacket(block, blockState));
+            channel.write(new ClientboundBlockUpdatePacket(block, blockState));
+            written = true;
 
             if (blockEntity != null) {
                 Packet<ClientGamePacketListener> packet = blockEntity.getUpdatePacket();
 
                 if (packet != null) {
-                    sendPacketImmediately(player, packet);
+                    channel.write(packet);
+                    written = true;
                 }
             }
         }
-    }
 
-    private static boolean sendPacketImmediately(Player player, Object packet) {
-        ServerGamePacketListenerImpl connection = ((CraftPlayer) player).getHandle().connection;
-
-        if (connection == null || connection.processedDisconnect) {
-            return false;
+        if (written) {
+            channel.flush();
         }
-
-        Channel channel = connection.connection.channel;
-
-        if (channel == null || !channel.isOpen()) {
-            return false;
-        }
-
-        channel.writeAndFlush(packet);
-        return true;
     }
 }
