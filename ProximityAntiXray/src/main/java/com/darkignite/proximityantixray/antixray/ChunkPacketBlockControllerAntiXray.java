@@ -552,18 +552,57 @@ public final class ChunkPacketBlockControllerAntiXray extends ChunkPacketBlockCo
         chunkPacketInfoAntiXray.getChunkPacket().setReady(true);
     }
 
+    private boolean isPlayerBaseBlock(BlockState bs) {
+        net.minecraft.world.level.block.Block b = bs.getBlock();
+        return b instanceof net.minecraft.world.level.block.TorchBlock
+            || b instanceof net.minecraft.world.level.block.LanternBlock
+            || b instanceof net.minecraft.world.level.block.BedBlock
+            || b instanceof net.minecraft.world.level.block.DoorBlock
+            || b instanceof net.minecraft.world.level.block.TrapDoorBlock
+            || b instanceof net.minecraft.world.level.block.HopperBlock
+            || b instanceof net.minecraft.world.level.block.CraftingTableBlock
+            || b instanceof net.minecraft.world.level.block.AbstractFurnaceBlock
+            || b instanceof net.minecraft.world.level.block.BarrelBlock
+            || b instanceof net.minecraft.world.level.block.SignBlock
+            || b instanceof net.minecraft.world.level.block.WallSignBlock
+            || b instanceof net.minecraft.world.level.block.CarpetBlock
+            || b instanceof net.minecraft.world.level.block.TransparentBlock
+            || b instanceof net.minecraft.world.level.block.StainedGlassBlock
+            || b instanceof net.minecraft.world.level.block.RedStoneWireBlock
+            || b instanceof net.minecraft.world.level.block.DiodeBlock;
+    }
+
     private void concealDungeon(Level level, BlockPos spawnerPos, Map<? super BlockPos, ? super Boolean> blocks, Set<? super BlockPos> blockEntities) {
+        BlockState spawnerState = level.getBlockState(spawnerPos);
+        if (!spawnerState.is(Blocks.SPAWNER)) {
+            return; // Spawner was destroyed! Do not conceal structure.
+        }
+
         int sx = spawnerPos.getX(), sy = spawnerPos.getY(), sz = spawnerPos.getZ();
         int hr = plugin.getDungeonHorizontalRadius(level.getWorld());
         int vu = plugin.getDungeonVerticalRadiusUp(level.getWorld());
         int vd = plugin.getDungeonVerticalRadiusDown(level.getWorld());
+
+        // Check if players have built a base inside this dungeon
+        for (int dx = -hr; dx <= hr; dx++) {
+            for (int dz = -hr; dz <= hr; dz++) {
+                for (int dy = -vd; dy <= vu; dy++) {
+                    BlockPos checkPos = new BlockPos(sx + dx, sy + dy, sz + dz);
+                    if (isPlayerBaseBlock(level.getBlockState(checkPos))) {
+                        return; // Player base/farm detected! Do not conceal.
+                    }
+                }
+            }
+        }
+
         int count = 0;
         for (int dx = -hr; dx <= hr; dx++) {
             for (int dz = -hr; dz <= hr; dz++) {
                 for (int dy = -vd; dy <= vu; dy++) {
                     BlockPos tPos = new BlockPos(sx + dx, sy + dy, sz + dz);
                     BlockState st = level.getBlockState(tPos);
-                    if (!st.is(Blocks.STONE) && !st.is(Blocks.DEEPSLATE) && !st.is(Blocks.BEDROCK)) {
+                    // Only conceal untouched natural dungeon blocks
+                    if (st.isAir() || st.is(Blocks.COBBLESTONE) || st.is(Blocks.MOSSY_COBBLESTONE) || st.is(Blocks.CHEST) || st.is(Blocks.SPAWNER)) {
                         blocks.put(tPos, true);
                         if (st.hasBlockEntity()) {
                             blockEntities.add(tPos);
@@ -573,7 +612,6 @@ public final class ChunkPacketBlockControllerAntiXray extends ChunkPacketBlockCo
                 }
             }
         }
-        plugin.getLogger().info("[DungeonConceal] Spawner at (" + sx + ", " + sy + ", " + sz + ") - Concealed " + count + " blocks around it as solid stone.");
     }
 
     private void obfuscateLayer(ChunkPos chunkPos, int minSectionY, int chunkSectionIndex, int y, BitStorageReader bitStorageReader, BitStorageWriter bitStorageWriter, boolean[] solid, boolean[] obfuscate, boolean[] trace, boolean[] blockEntity, int[] presetBlockStateBits, boolean[][] current, boolean[][] next, boolean[][] nextNext, boolean[][] traceCache, boolean[][] blockEntityCache, LevelChunkSection[] nearbyChunkSections, IntSupplier random, Map<? super BlockPos, ? super Boolean> blocks, Set<? super BlockPos> blockEntities) {

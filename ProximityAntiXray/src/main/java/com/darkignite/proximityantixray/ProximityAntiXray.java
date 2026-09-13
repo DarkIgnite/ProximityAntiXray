@@ -27,6 +27,7 @@ import com.darkignite.proximityantixray.data.PlayerData;
 import com.darkignite.proximityantixray.listeners.PacketListener;
 import com.darkignite.proximityantixray.listeners.PlayerListener;
 import com.darkignite.proximityantixray.listeners.WorldListener;
+import com.darkignite.proximityantixray.listeners.BlockListener;
 import com.darkignite.proximityantixray.tasks.ProximityTimerTask;
 import com.darkignite.proximityantixray.tasks.UpdateBukkitRunnable;
 
@@ -89,6 +90,7 @@ public final class ProximityAntiXray extends JavaPlugin {
         PluginManager pluginManager = getServer().getPluginManager();
         pluginManager.registerEvents(worldListener, this);
         pluginManager.registerEvents(new PlayerListener(this), this);
+        pluginManager.registerEvents(new BlockListener(this), this);
         ProtocolLibrary.getProtocolManager().addPacketListener(new PacketListener(this));
 
         for (World world : getServer().getWorlds()) {
@@ -269,7 +271,6 @@ public final class ProximityAntiXray extends JavaPlugin {
 
         if (count > 0) {
             channel.flush();
-            getLogger().info("[DungeonConceal] Sent " + count + " conceal packets to " + player.getName());
         }
     }
 
