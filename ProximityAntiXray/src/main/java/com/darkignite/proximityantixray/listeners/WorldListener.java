@@ -28,27 +28,31 @@ public final class WorldListener implements Listener {
 
     @EventHandler
     public void onWorldInit(WorldInitEvent event) {
-        World world = event.getWorld();
+        injectWorld(event.getWorld());
+    }
 
-        if (plugin.isEnabled(world)) {
-            FileConfiguration config = plugin.getConfig();
-            String worldName = world.getName();
-            double revealDistance = Math.max(config.getDouble("world-settings." + worldName + ".reveal-distance", config.getDouble("world-settings.default.reveal-distance", 6.0)), 0.);
-            boolean rehideBlocks = config.getBoolean("world-settings." + worldName + ".rehide-blocks", config.getBoolean("world-settings.default.rehide-blocks", true));
-            double rehideDistance = Math.max(config.getDouble("world-settings." + worldName + ".rehide-distance", config.getDouble("world-settings.default.rehide-distance", 8.0)), 0.);
-            int maxBlocksPerChunk = Math.max(config.getInt("world-settings." + worldName + ".max-blocks-per-chunk", config.getInt("world-settings.default.max-blocks-per-chunk", 60)), 0);
-            List<String> proximityBlocks = config.getList("world-settings." + worldName + ".proximity-blocks", config.getList("world-settings.default.proximity-blocks")).stream().filter(Objects::nonNull).map(String::valueOf).collect(Collectors.toList());
-            ServerLevel serverLevel = ((CraftWorld) world).getHandle();
-            ChunkPacketBlockControllerAntiXray controller = new ChunkPacketBlockControllerAntiXray(plugin, false, revealDistance, rehideBlocks, rehideDistance, maxBlocksPerChunk, proximityBlocks.isEmpty() ? null : proximityBlocks, serverLevel, MinecraftServer.getServer().executor);
+    public void injectWorld(World world) {
+        if (!plugin.isEnabled(world)) {
+            return;
+        }
 
-            try {
-                Field field = Level.class.getDeclaredField("chunkPacketBlockController");
-                field.setAccessible(true);
-                field.set(serverLevel, controller);
-                plugin.getLogger().info("Injected ProximityAntiXray controller into world: " + worldName);
-            } catch (NoSuchFieldException | IllegalAccessException e) {
-                throw new RuntimeException(e);
-            }
+        FileConfiguration config = plugin.getConfig();
+        String worldName = world.getName();
+        double revealDistance = Math.max(config.getDouble("world-settings." + worldName + ".reveal-distance", config.getDouble("world-settings.default.reveal-distance", 6.0)), 0.);
+        boolean rehideBlocks = config.getBoolean("world-settings." + worldName + ".rehide-blocks", config.getBoolean("world-settings.default.rehide-blocks", true));
+        double rehideDistance = Math.max(config.getDouble("world-settings." + worldName + ".rehide-distance", config.getDouble("world-settings.default.rehide-distance", 8.0)), 0.);
+        int maxBlocksPerChunk = Math.max(config.getInt("world-settings." + worldName + ".max-blocks-per-chunk", config.getInt("world-settings.default.max-blocks-per-chunk", 60)), 0);
+        List<String> proximityBlocks = config.getList("world-settings." + worldName + ".proximity-blocks", config.getList("world-settings.default.proximity-blocks")).stream().filter(Objects::nonNull).map(String::valueOf).collect(Collectors.toList());
+        ServerLevel serverLevel = ((CraftWorld) world).getHandle();
+        ChunkPacketBlockControllerAntiXray controller = new ChunkPacketBlockControllerAntiXray(plugin, false, revealDistance, rehideBlocks, rehideDistance, maxBlocksPerChunk, proximityBlocks.isEmpty() ? null : proximityBlocks, serverLevel, MinecraftServer.getServer().executor);
+
+        try {
+            Field field = Level.class.getDeclaredField("chunkPacketBlockController");
+            field.setAccessible(true);
+            field.set(serverLevel, controller);
+            plugin.getLogger().info("Injected ProximityAntiXray controller into world: " + worldName);
+        } catch (NoSuchFieldException | IllegalAccessException e) {
+            throw new RuntimeException(e);
         }
     }
 }

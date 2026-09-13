@@ -85,10 +85,15 @@ public final class ProximityAntiXray extends JavaPlugin {
             new UpdateBukkitRunnable(this).runTaskTimer(this, 0L, updateTicks);
         }
 
+        WorldListener worldListener = new WorldListener(this);
         PluginManager pluginManager = getServer().getPluginManager();
-        pluginManager.registerEvents(new WorldListener(this), this);
+        pluginManager.registerEvents(worldListener, this);
         pluginManager.registerEvents(new PlayerListener(this), this);
         ProtocolLibrary.getProtocolManager().addPacketListener(new PacketListener(this));
+
+        for (World world : getServer().getWorlds()) {
+            worldListener.injectWorld(world);
+        }
 
         ProximityAntiXrayCommand cmd = new ProximityAntiXrayCommand(this);
         getCommand("proximityantixray").setExecutor(cmd);

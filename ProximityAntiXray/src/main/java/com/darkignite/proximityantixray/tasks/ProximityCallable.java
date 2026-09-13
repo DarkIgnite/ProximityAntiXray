@@ -7,6 +7,7 @@ import java.util.Queue;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ConcurrentMap;
 
+import org.bukkit.World;
 import org.bukkit.craftbukkit.CraftWorld;
 import org.bukkit.util.Vector;
 
@@ -37,12 +38,23 @@ public final class ProximityCallable implements Callable<Void> {
         this.playerData = playerData;
         ConcurrentMap<LongWrapper, ChunkBlocks> chunks = playerData.getChunks();
         this.chunks = chunks.values();
-        ChunkPacketBlockControllerAntiXray controller = (ChunkPacketBlockControllerAntiXray) ((CraftWorld) playerData.getLocations()[0].getWorld()).getHandle().chunkPacketBlockController;
-        this.revealDistance = controller.revealDistance;
-        this.revealDistanceSquared = revealDistance * revealDistance;
-        this.rehideBlocks = controller.rehideBlocks;
-        this.rehideDistance = controller.rehideDistance;
-        this.rehideDistanceSquared = rehideDistance * rehideDistance;
+        World world = playerData.getLocations()[0].getWorld();
+        Object c = ((CraftWorld) world).getHandle().chunkPacketBlockController;
+        if (c instanceof ChunkPacketBlockControllerAntiXray controller) {
+            this.revealDistance = controller.revealDistance;
+            this.revealDistanceSquared = revealDistance * revealDistance;
+            this.rehideBlocks = controller.rehideBlocks;
+            this.rehideDistance = controller.rehideDistance;
+            this.rehideDistanceSquared = rehideDistance * rehideDistance;
+        } else {
+            String wn = world.getName();
+            var config = plugin.getConfig();
+            this.revealDistance = Math.max(config.getDouble("world-settings." + wn + ".reveal-distance", config.getDouble("world-settings.default.reveal-distance", 6.0)), 0.0);
+            this.revealDistanceSquared = revealDistance * revealDistance;
+            this.rehideBlocks = config.getBoolean("world-settings." + wn + ".rehide-blocks", config.getBoolean("world-settings.default.rehide-blocks", true));
+            this.rehideDistance = Math.max(config.getDouble("world-settings." + wn + ".rehide-distance", config.getDouble("world-settings.default.rehide-distance", 8.0)), 0.0);
+            this.rehideDistanceSquared = rehideDistance * rehideDistance;
+        }
     }
 
     @Override
