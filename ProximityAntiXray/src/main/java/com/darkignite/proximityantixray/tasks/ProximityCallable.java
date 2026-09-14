@@ -136,7 +136,7 @@ public final class ProximityCallable implements Callable<Void> {
                         }
                     }
                 } else if (!hidden && rehideBlocks && distanceSquared >= rehideDistanceSquared) {
-                    if (plugin.isSpawnerDestroyedNear(chunk.getLevel().getWorld(), block)) {
+                    if (plugin.isSpawnerDestroyedNear(chunk.getLevel().getWorld(), block) || plugin.getPlayerPlacedSpawners().contains(block)) {
                         iterator.remove();
                         continue;
                     }

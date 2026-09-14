@@ -114,9 +114,9 @@ public final class UpdateBukkitRunnable extends BukkitRunnable implements Consum
                 if (isHidden == null || !isHidden) {
                     continue; // Spawner broken or block un-tracked, do NOT turn into stone!
                 }
-                if (plugin.isSpawnerDestroyedNear(world, block)) {
+                if (plugin.isSpawnerDestroyedNear(world, block) || plugin.getPlayerPlacedSpawners().contains(block)) {
                     chunkBlocks.getBlocks().remove(block);
-                    continue; // Spawner near this block was destroyed!
+                    continue; // Spawner near this block was destroyed or placed by player!
                 }
 
                 if (environment == Environment.NETHER) {

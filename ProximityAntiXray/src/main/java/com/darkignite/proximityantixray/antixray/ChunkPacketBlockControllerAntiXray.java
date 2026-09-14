@@ -593,8 +593,8 @@ public final class ChunkPacketBlockControllerAntiXray extends ChunkPacketBlockCo
     }
 
     private void concealDungeon(Level level, BlockPos spawnerPos, Map<? super BlockPos, ? super Boolean> blocks, Set<? super BlockPos> blockEntities) {
-        // 1. Spawner was destroyed or marked destroyed: do not conceal
-        if (plugin.getDestroyedSpawners().contains(spawnerPos)) {
+        // 1. Spawner was destroyed or placed by player: do not conceal
+        if (plugin.getDestroyedSpawners().contains(spawnerPos) || plugin.getPlayerPlacedSpawners().contains(spawnerPos)) {
             return;
         }
 
@@ -603,15 +603,26 @@ public final class ChunkPacketBlockControllerAntiXray extends ChunkPacketBlockCo
             return;
         }
 
-        // 2. Player-placed spawner detection via PDC
-        try {
-            org.bukkit.block.BlockState bs = level.getWorld().getBlockAt(spawnerPos.getX(), spawnerPos.getY(), spawnerPos.getZ()).getState();
-            if (bs instanceof org.bukkit.block.CreatureSpawner spawner) {
-                if (spawner.getPersistentDataContainer().has(plugin.getPlayerPlacedKey(), org.bukkit.persistence.PersistentDataType.BYTE)) {
-                    return; // Placed by player! Leave untouched.
-                }
+        // 2. Must be underground (not exposed to sky, y <= 64)
+        if (level.canSeeSky(spawnerPos) || spawnerPos.getY() > 64) {
+            return;
+        }
+
+        // 3. Player-placed spawner detection via direct NMS PDC field
+        net.minecraft.world.level.block.entity.BlockEntity be = level.getBlockEntity(spawnerPos);
+        if (be != null && be.persistentDataContainer != null) {
+            if (be.persistentDataContainer.has(plugin.getPlayerPlacedKey(), org.bukkit.persistence.PersistentDataType.BYTE)) {
+                return; // Placed by player! Leave untouched.
             }
-        } catch (Throwable ignored) {
+        }
+
+        // 4. Floor beneath spawner check (vanilla MonsterRoom floor is at y-1 or y-2 and made of cobble/mossy cobble)
+        BlockState floor1 = level.getBlockState(spawnerPos.below());
+        BlockState floor2 = level.getBlockState(spawnerPos.below(2));
+        boolean hasDungeonFloor = floor1.is(Blocks.COBBLESTONE) || floor1.is(Blocks.MOSSY_COBBLESTONE)
+                               || floor2.is(Blocks.COBBLESTONE) || floor2.is(Blocks.MOSSY_COBBLESTONE);
+        if (!hasDungeonFloor) {
+            return; // Not a dungeon floor! (e.g. player placed spawner on wood, dirt, grass, stone bricks, etc.)
         }
 
         int sx = spawnerPos.getX(), sy = spawnerPos.getY(), sz = spawnerPos.getZ();
@@ -619,19 +630,34 @@ public final class ChunkPacketBlockControllerAntiXray extends ChunkPacketBlockCo
         int vu = plugin.getDungeonVerticalRadiusUp(level.getWorld());
         int vd = plugin.getDungeonVerticalRadiusDown(level.getWorld());
 
-        // 3. Player base/farm detection in surrounding room
+        int cobbleCount = 0;
+        int mossyCount = 0;
+
+        // 5. Scan surrounding room: detect player base blocks and count cobblestone/mossy cobblestone
         for (int dx = -hr; dx <= hr; dx++) {
             for (int dz = -hr; dz <= hr; dz++) {
                 for (int dy = -vd; dy <= vu; dy++) {
                     BlockPos checkPos = new BlockPos(sx + dx, sy + dy, sz + dz);
-                    if (isPlayerBaseBlock(level.getBlockState(checkPos))) {
+                    BlockState bs = level.getBlockState(checkPos);
+                    if (isPlayerBaseBlock(bs)) {
                         return; // Player base/farm detected! Do not conceal.
+                    }
+                    if (bs.is(Blocks.COBBLESTONE)) {
+                        cobbleCount++;
+                    } else if (bs.is(Blocks.MOSSY_COBBLESTONE)) {
+                        mossyCount++;
                     }
                 }
             }
         }
 
-        // 4. Conceal natural untouched dungeon room
+        // 6. Natural vanilla Monster Rooms ALWAYS have an enclosure of cobblestone and mossy cobblestone!
+        // At least 10 cobblestone and at least 1 mossy cobblestone required.
+        if (cobbleCount < 10 || mossyCount < 1) {
+            return; // Not an enclosed natural dungeon!
+        }
+
+        // 7. Conceal natural untouched dungeon room
         int count = 0;
         for (int dx = -hr; dx <= hr; dx++) {
             for (int dz = -hr; dz <= hr; dz++) {

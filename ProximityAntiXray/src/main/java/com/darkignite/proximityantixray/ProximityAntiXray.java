@@ -48,6 +48,7 @@ public final class ProximityAntiXray extends JavaPlugin {
     private final ConcurrentMap<ClientboundLevelChunkWithLightPacket, ChunkBlocks> packetChunkBlocksCache = new MapMaker().weakKeys().makeMap();
     private final ConcurrentMap<UUID, PlayerData> playerData = new ConcurrentHashMap<>();
     private final java.util.Set<BlockPos> destroyedSpawners = ConcurrentHashMap.newKeySet();
+    private final java.util.Set<BlockPos> playerPlacedSpawners = ConcurrentHashMap.newKeySet();
     private org.bukkit.NamespacedKey playerPlacedKey;
     private ExecutorService executorService;
     private Timer timer;
@@ -155,6 +156,7 @@ public final class ProximityAntiXray extends JavaPlugin {
                 packetChunkBlocksCache.clear();
                 playerData.clear();
                 destroyedSpawners.clear();
+                playerPlacedSpawners.clear();
             }
         } catch (Throwable t) {
             if (throwable == null) {
@@ -280,6 +282,10 @@ public final class ProximityAntiXray extends JavaPlugin {
 
     public java.util.Set<BlockPos> getDestroyedSpawners() {
         return destroyedSpawners;
+    }
+
+    public java.util.Set<BlockPos> getPlayerPlacedSpawners() {
+        return playerPlacedSpawners;
     }
 
     public org.bukkit.NamespacedKey getPlayerPlacedKey() {

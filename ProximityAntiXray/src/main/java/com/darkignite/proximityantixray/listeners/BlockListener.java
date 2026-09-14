@@ -47,6 +47,7 @@ public final class BlockListener implements Listener {
 
         if (block.getType() == Material.SPAWNER || block.getType() == Material.TRIAL_SPAWNER) {
             // 1. Permanently register spawner as destroyed
+            plugin.getPlayerPlacedSpawners().remove(breakPos);
             plugin.getDestroyedSpawners().add(breakPos);
 
             int hr = plugin.getDungeonHorizontalRadius(world) + 4;
@@ -132,10 +133,13 @@ public final class BlockListener implements Listener {
         removeTrackedBlock(world, placePos);
 
         if (block.getType() == Material.SPAWNER) {
+            plugin.getPlayerPlacedSpawners().add(placePos);
+
             try {
-                if (block.getState(false) instanceof org.bukkit.block.CreatureSpawner spawner) {
-                    spawner.getPersistentDataContainer().set(plugin.getPlayerPlacedKey(), org.bukkit.persistence.PersistentDataType.BYTE, (byte) 1);
-                    spawner.update();
+                ServerLevel serverLevel = ((CraftWorld) world).getHandle();
+                net.minecraft.world.level.block.entity.BlockEntity be = serverLevel.getBlockEntity(placePos);
+                if (be != null && be.persistentDataContainer != null) {
+                    be.persistentDataContainer.set(plugin.getPlayerPlacedKey(), org.bukkit.persistence.PersistentDataType.BYTE, (byte) 1);
                 }
             } catch (Throwable ignored) {
             }
