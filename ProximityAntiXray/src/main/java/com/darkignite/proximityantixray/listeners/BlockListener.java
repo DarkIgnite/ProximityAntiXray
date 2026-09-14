@@ -45,32 +45,50 @@ public final class BlockListener implements Listener {
         int bz = block.getZ();
         BlockPos breakPos = new BlockPos(bx, by, bz);
 
-        if (block.getType() == Material.SPAWNER) {
-            // Spawner was destroyed! Un-conceal the entire dungeon room permanently.
-            int hr = plugin.getDungeonHorizontalRadius(world) + 1;
-            int vu = plugin.getDungeonVerticalRadiusUp(world) + 1;
-            int vd = plugin.getDungeonVerticalRadiusDown(world) + 1;
+        if (block.getType() == Material.SPAWNER || block.getType() == Material.TRIAL_SPAWNER) {
+            // 1. Permanently register spawner as destroyed
+            plugin.getDestroyedSpawners().add(breakPos);
+
+            int hr = plugin.getDungeonHorizontalRadius(world) + 4;
+            int vu = plugin.getDungeonVerticalRadiusUp(world) + 4;
+            int vd = plugin.getDungeonVerticalRadiusDown(world) + 4;
 
             ServerLevel serverLevel = ((CraftWorld) world).getHandle();
 
+            // 2. Remove all matching blocks from packetChunkBlocksCache
+            for (ChunkBlocks cb : plugin.getPacketChunkBlocksCache().values()) {
+                cb.getBlocks().keySet().removeIf(pos ->
+                    Math.abs(pos.getX() - bx) <= hr && Math.abs(pos.getZ() - bz) <= hr &&
+                    pos.getY() >= by - vd && pos.getY() <= by + vu
+                );
+            }
+
+            // 3. Un-conceal for all online players and purge pending rehide results
             for (Player player : world.getPlayers()) {
                 PlayerData data = plugin.getPlayerData().get(player.getUniqueId());
                 if (data == null) continue;
+
+                // Remove any pending re-hide results queued for these positions
+                data.getResults().removeIf(r -> {
+                    BlockPos pos = r.getBlock();
+                    return Math.abs(pos.getX() - bx) <= hr && Math.abs(pos.getZ() - bz) <= hr &&
+                           pos.getY() >= by - vd && pos.getY() <= by + vu;
+                });
 
                 ServerGamePacketListenerImpl conn = ((CraftPlayer) player).getHandle().connection;
                 Channel channel = (conn != null && !conn.processedDisconnect) ? conn.connection.channel : null;
                 boolean written = false;
 
                 for (ChunkBlocks cb : data.getChunks().values()) {
-                    Map<BlockPos, Boolean> map = cb.getBlocks();
-                    Iterator<Map.Entry<BlockPos, Boolean>> it = map.entrySet().iterator();
+                    Iterator<Map.Entry<BlockPos, Boolean>> it = cb.getBlocks().entrySet().iterator();
                     while (it.hasNext()) {
                         BlockPos pos = it.next().getKey();
                         if (Math.abs(pos.getX() - bx) <= hr && Math.abs(pos.getZ() - bz) <= hr &&
                             pos.getY() >= by - vd && pos.getY() <= by + vu) {
                             it.remove();
                             if (channel != null && channel.isOpen()) {
-                                channel.write(new ClientboundBlockUpdatePacket(pos, serverLevel.getBlockState(pos)));
+                                net.minecraft.world.level.block.state.BlockState realState = pos.equals(breakPos) ? net.minecraft.world.level.block.Blocks.AIR.defaultBlockState() : serverLevel.getBlockState(pos);
+                                channel.write(new ClientboundBlockUpdatePacket(pos, realState));
                                 written = true;
                             }
                         }
@@ -79,6 +97,23 @@ public final class BlockListener implements Listener {
                 if (written && channel != null) {
                     channel.flush();
                 }
+            }
+
+            // 4. Schedule 1-tick delay packet update to guarantee client shows AIR at spawner position
+            Runnable delayedUpdate = () -> {
+                for (Player player : world.getPlayers()) {
+                    ServerGamePacketListenerImpl conn = ((CraftPlayer) player).getHandle().connection;
+                    Channel channel = (conn != null && !conn.processedDisconnect) ? conn.connection.channel : null;
+                    if (channel != null && channel.isOpen()) {
+                        channel.write(new ClientboundBlockUpdatePacket(breakPos, net.minecraft.world.level.block.Blocks.AIR.defaultBlockState()));
+                        channel.flush();
+                    }
+                }
+            };
+            if (plugin.isFolia()) {
+                plugin.getServer().getGlobalRegionScheduler().runDelayed(plugin, (t) -> delayedUpdate.run(), 1L);
+            } else {
+                plugin.getServer().getScheduler().runTaskLater(plugin, delayedUpdate, 1L);
             }
         } else {
             removeTrackedBlock(world, breakPos);
@@ -95,12 +130,28 @@ public final class BlockListener implements Listener {
 
         BlockPos placePos = new BlockPos(block.getX(), block.getY(), block.getZ());
         removeTrackedBlock(world, placePos);
+
+        if (block.getType() == Material.SPAWNER) {
+            try {
+                if (block.getState(false) instanceof org.bukkit.block.CreatureSpawner spawner) {
+                    spawner.getPersistentDataContainer().set(plugin.getPlayerPlacedKey(), org.bukkit.persistence.PersistentDataType.BYTE, (byte) 1);
+                    spawner.update();
+                }
+            } catch (Throwable ignored) {
+            }
+        }
     }
 
     private void removeTrackedBlock(World world, BlockPos pos) {
+        for (ChunkBlocks cb : plugin.getPacketChunkBlocksCache().values()) {
+            cb.getBlocks().remove(pos);
+        }
+
         for (Player player : world.getPlayers()) {
             PlayerData data = plugin.getPlayerData().get(player.getUniqueId());
             if (data == null) continue;
+
+            data.getResults().removeIf(r -> r.getBlock().equals(pos));
 
             for (ChunkBlocks cb : data.getChunks().values()) {
                 cb.getBlocks().remove(pos);

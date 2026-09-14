@@ -109,14 +109,25 @@ public final class UpdateBukkitRunnable extends BukkitRunnable implements Consum
                 if (blockState.hasBlockEntity()) {
                     blockEntity = serverLevel.getBlockEntity(block);
                 }
-            } else if (environment == Environment.NETHER) {
-                blockState = Blocks.NETHERRACK.defaultBlockState();
-            } else if (environment == Environment.THE_END) {
-                blockState = Blocks.END_STONE.defaultBlockState();
-            } else if (block.getY() < 0) {
-                blockState = Blocks.DEEPSLATE.defaultBlockState();
             } else {
-                blockState = Blocks.STONE.defaultBlockState();
+                Boolean isHidden = chunkBlocks.getBlocks().get(block);
+                if (isHidden == null || !isHidden) {
+                    continue; // Spawner broken or block un-tracked, do NOT turn into stone!
+                }
+                if (plugin.isSpawnerDestroyedNear(world, block)) {
+                    chunkBlocks.getBlocks().remove(block);
+                    continue; // Spawner near this block was destroyed!
+                }
+
+                if (environment == Environment.NETHER) {
+                    blockState = Blocks.NETHERRACK.defaultBlockState();
+                } else if (environment == Environment.THE_END) {
+                    blockState = Blocks.END_STONE.defaultBlockState();
+                } else if (block.getY() < 0) {
+                    blockState = Blocks.DEEPSLATE.defaultBlockState();
+                } else {
+                    blockState = Blocks.STONE.defaultBlockState();
+                }
             }
 
             channel.write(new ClientboundBlockUpdatePacket(block, blockState));

@@ -94,9 +94,9 @@ public final class ChunkPacketBlockControllerAntiXray extends ChunkPacketBlockCo
         updateRadius = paperWorldConfig.updateRadius;
         usePermission = paperWorldConfig.usePermission;
         this.rayTraceThirdPerson = rayTraceThirdPerson;
-        this.revealDistance = revealDistance;
+        this.revealDistance = Math.max(revealDistance, 0.0);
         this.rehideBlocks = rehideBlocks;
-        this.rehideDistance = rehideDistance;
+        this.rehideDistance = Math.max(rehideDistance, this.revealDistance + 1.0);
         this.maxRayTraceBlockCountPerChunk = maxRayTraceBlockCountPerChunk;
         List<Block> toObfuscate;
 
@@ -164,6 +164,16 @@ public final class ChunkPacketBlockControllerAntiXray extends ChunkPacketBlockCo
             traceGlobal = new boolean[Block.BLOCK_STATE_REGISTRY.size()];
 
             for (String id : toTrace) {
+                // Exclude chest, trapped_chest, mossy_cobblestone, and spawner from global chunk layer raytracing!
+                // This guarantees player chests, player mossy cobble, and player spawners in bases are NEVER hidden.
+                // Natural structure dungeons are safely and completely concealed via concealDungeon().
+                if (id.equalsIgnoreCase("chest") || id.equalsIgnoreCase("minecraft:chest") ||
+                    id.equalsIgnoreCase("trapped_chest") || id.equalsIgnoreCase("minecraft:trapped_chest") ||
+                    id.equalsIgnoreCase("mossy_cobblestone") || id.equalsIgnoreCase("minecraft:mossy_cobblestone") ||
+                    id.equalsIgnoreCase("spawner") || id.equalsIgnoreCase("minecraft:spawner")) {
+                    continue;
+                }
+
                 Block block = BuiltInRegistries.BLOCK.getOptional(ResourceLocation.parse(id)).orElse(null);
 
                 // Don't obfuscate air because air causes unnecessary block updates and causes block updates to fail in the void
@@ -524,7 +534,7 @@ public final class ChunkPacketBlockControllerAntiXray extends ChunkPacketBlockCo
         }
 
         if (plugin.isRunning()) {
-            plugin.getPacketChunkBlocksCache().put(chunkPacketInfoAntiXray.getChunkPacket(), new ChunkBlocks(chunkPacketInfoAntiXray.getChunk(), blocks));
+            plugin.getPacketChunkBlocksCache().put(chunkPacketInfoAntiXray.getChunkPacket(), new ChunkBlocks(chunkPacketInfoAntiXray.getChunk(), new java.util.concurrent.ConcurrentHashMap<>(blocks)));
         }
 
         if (!blockEntities.isEmpty()) {
@@ -559,6 +569,7 @@ public final class ChunkPacketBlockControllerAntiXray extends ChunkPacketBlockCo
             || b instanceof net.minecraft.world.level.block.BedBlock
             || b instanceof net.minecraft.world.level.block.DoorBlock
             || b instanceof net.minecraft.world.level.block.TrapDoorBlock
+            || b instanceof net.minecraft.world.level.block.FenceGateBlock
             || b instanceof net.minecraft.world.level.block.HopperBlock
             || b instanceof net.minecraft.world.level.block.CraftingTableBlock
             || b instanceof net.minecraft.world.level.block.AbstractFurnaceBlock
@@ -569,13 +580,38 @@ public final class ChunkPacketBlockControllerAntiXray extends ChunkPacketBlockCo
             || b instanceof net.minecraft.world.level.block.TransparentBlock
             || b instanceof net.minecraft.world.level.block.StainedGlassBlock
             || b instanceof net.minecraft.world.level.block.RedStoneWireBlock
-            || b instanceof net.minecraft.world.level.block.DiodeBlock;
+            || b == net.minecraft.world.level.block.Blocks.PISTON
+            || b == net.minecraft.world.level.block.Blocks.STICKY_PISTON
+            || b instanceof net.minecraft.world.level.block.LeverBlock
+            || b instanceof net.minecraft.world.level.block.ButtonBlock
+            || b instanceof net.minecraft.world.level.block.AnvilBlock
+            || b instanceof net.minecraft.world.level.block.EnchantingTableBlock
+            || b instanceof net.minecraft.world.level.block.BrewingStandBlock
+            || b instanceof net.minecraft.world.level.block.DispenserBlock
+            || b instanceof net.minecraft.world.level.block.DropperBlock
+            || b instanceof net.minecraft.world.level.block.WaterlilyBlock;
     }
 
     private void concealDungeon(Level level, BlockPos spawnerPos, Map<? super BlockPos, ? super Boolean> blocks, Set<? super BlockPos> blockEntities) {
+        // 1. Spawner was destroyed or marked destroyed: do not conceal
+        if (plugin.getDestroyedSpawners().contains(spawnerPos)) {
+            return;
+        }
+
         BlockState spawnerState = level.getBlockState(spawnerPos);
         if (!spawnerState.is(Blocks.SPAWNER)) {
-            return; // Spawner was destroyed! Do not conceal structure.
+            return;
+        }
+
+        // 2. Player-placed spawner detection via PDC
+        try {
+            org.bukkit.block.BlockState bs = level.getWorld().getBlockAt(spawnerPos.getX(), spawnerPos.getY(), spawnerPos.getZ()).getState();
+            if (bs instanceof org.bukkit.block.CreatureSpawner spawner) {
+                if (spawner.getPersistentDataContainer().has(plugin.getPlayerPlacedKey(), org.bukkit.persistence.PersistentDataType.BYTE)) {
+                    return; // Placed by player! Leave untouched.
+                }
+            }
+        } catch (Throwable ignored) {
         }
 
         int sx = spawnerPos.getX(), sy = spawnerPos.getY(), sz = spawnerPos.getZ();
@@ -583,7 +619,7 @@ public final class ChunkPacketBlockControllerAntiXray extends ChunkPacketBlockCo
         int vu = plugin.getDungeonVerticalRadiusUp(level.getWorld());
         int vd = plugin.getDungeonVerticalRadiusDown(level.getWorld());
 
-        // Check if players have built a base inside this dungeon
+        // 3. Player base/farm detection in surrounding room
         for (int dx = -hr; dx <= hr; dx++) {
             for (int dz = -hr; dz <= hr; dz++) {
                 for (int dy = -vd; dy <= vu; dy++) {
@@ -595,6 +631,7 @@ public final class ChunkPacketBlockControllerAntiXray extends ChunkPacketBlockCo
             }
         }
 
+        // 4. Conceal natural untouched dungeon room
         int count = 0;
         for (int dx = -hr; dx <= hr; dx++) {
             for (int dz = -hr; dz <= hr; dz++) {
@@ -602,7 +639,7 @@ public final class ChunkPacketBlockControllerAntiXray extends ChunkPacketBlockCo
                     BlockPos tPos = new BlockPos(sx + dx, sy + dy, sz + dz);
                     BlockState st = level.getBlockState(tPos);
                     // Only conceal untouched natural dungeon blocks
-                    if (st.isAir() || st.is(Blocks.COBBLESTONE) || st.is(Blocks.MOSSY_COBBLESTONE) || st.is(Blocks.CHEST) || st.is(Blocks.SPAWNER)) {
+                    if (st.isAir() || st.is(Blocks.COBBLESTONE) || st.is(Blocks.MOSSY_COBBLESTONE) || st.is(Blocks.CHEST) || st.is(Blocks.SPAWNER) || st.is(Blocks.COBWEB)) {
                         blocks.put(tPos, true);
                         if (st.hasBlockEntity()) {
                             blockEntities.add(tPos);

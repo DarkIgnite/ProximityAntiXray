@@ -15,9 +15,9 @@ world-settings:
     enabled: true
     # Radius in blocks at which the spawner/block becomes visible to the player
     # Freecam users cannot see it because camera movements don't change server coordinates!
-    reveal-distance: 6.0
+    reveal-distance: 8.0
     # Radius in blocks at which the block gets re-hidden when the player walks away
-    rehide-distance: 8.0
+    rehide-distance: 10.0
     # Whether to re-hide the block when the player leaves the radius
     rehide-blocks: true
     # Maximum number of hidden/proximity-tracked blocks per chunk (without dungeon blocks)
@@ -32,13 +32,11 @@ world-settings:
     dungeon-vertical-radius-down: 2
 
     # Blocks that are hidden and revealed only by close physical proximity
-    # Leave empty [] to inherit all hidden-blocks from Paper config
+    # Spawners, dungeon chests, and dungeon rooms are automatically protected by fill-dungeon-with-stone.
+    # Player chests and player spawners in bases are NEVER hidden!
     proximity-blocks:
-      - spawner
       - trial_spawner
       - vault
-      - chest
-      - mossy_cobblestone
 
   world_nether:
     # Nether uses Paper Anti-Xray Engine Mode 1 for ancient_debris. Proximity check not needed.

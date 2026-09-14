@@ -47,12 +47,15 @@ public final class ProximityAntiXray extends JavaPlugin {
     private volatile boolean timingsEnabled = false;
     private final ConcurrentMap<ClientboundLevelChunkWithLightPacket, ChunkBlocks> packetChunkBlocksCache = new MapMaker().weakKeys().makeMap();
     private final ConcurrentMap<UUID, PlayerData> playerData = new ConcurrentHashMap<>();
+    private final java.util.Set<BlockPos> destroyedSpawners = ConcurrentHashMap.newKeySet();
+    private org.bukkit.NamespacedKey playerPlacedKey;
     private ExecutorService executorService;
     private Timer timer;
     private long updateTicks = 1L;
 
     @Override
     public void onEnable() {
+        playerPlacedKey = new org.bukkit.NamespacedKey(this, "player_placed");
         saveDefaultConfig();
         FileConfiguration config = getConfig();
         config.options().copyDefaults(true);
@@ -151,6 +154,7 @@ public final class ProximityAntiXray extends JavaPlugin {
             } finally {
                 packetChunkBlocksCache.clear();
                 playerData.clear();
+                destroyedSpawners.clear();
             }
         } catch (Throwable t) {
             if (throwable == null) {
@@ -272,6 +276,34 @@ public final class ProximityAntiXray extends JavaPlugin {
         if (count > 0) {
             channel.flush();
         }
+    }
+
+    public java.util.Set<BlockPos> getDestroyedSpawners() {
+        return destroyedSpawners;
+    }
+
+    public org.bukkit.NamespacedKey getPlayerPlacedKey() {
+        return playerPlacedKey;
+    }
+
+    public boolean isSpawnerDestroyedNear(World world, BlockPos pos) {
+        if (destroyedSpawners.isEmpty()) {
+            return false;
+        }
+        int hr = getDungeonHorizontalRadius(world) + 4;
+        int vu = getDungeonVerticalRadiusUp(world) + 4;
+        int vd = getDungeonVerticalRadiusDown(world) + 4;
+        int px = pos.getX();
+        int py = pos.getY();
+        int pz = pos.getZ();
+
+        for (BlockPos spawnerPos : destroyedSpawners) {
+            if (Math.abs(px - spawnerPos.getX()) <= hr && Math.abs(pz - spawnerPos.getZ()) <= hr &&
+                py >= spawnerPos.getY() - vd && py <= spawnerPos.getY() + vu) {
+                return true;
+            }
+        }
+        return false;
     }
 
     public boolean validatePlayer(Player player) {

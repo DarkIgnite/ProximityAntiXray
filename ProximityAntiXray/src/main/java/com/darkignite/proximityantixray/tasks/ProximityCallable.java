@@ -41,10 +41,10 @@ public final class ProximityCallable implements Callable<Void> {
         World world = playerData.getLocations()[0].getWorld();
         Object c = ((CraftWorld) world).getHandle().chunkPacketBlockController;
         if (c instanceof ChunkPacketBlockControllerAntiXray controller) {
-            this.revealDistance = controller.revealDistance;
+            this.revealDistance = Math.max(controller.revealDistance, 0.0);
             this.revealDistanceSquared = revealDistance * revealDistance;
             this.rehideBlocks = controller.rehideBlocks;
-            this.rehideDistance = controller.rehideDistance;
+            this.rehideDistance = Math.max(controller.rehideDistance, this.revealDistance + 1.0);
             this.rehideDistanceSquared = rehideDistance * rehideDistance;
         } else {
             String wn = world.getName();
@@ -52,7 +52,8 @@ public final class ProximityCallable implements Callable<Void> {
             this.revealDistance = Math.max(config.getDouble("world-settings." + wn + ".reveal-distance", config.getDouble("world-settings.default.reveal-distance", 6.0)), 0.0);
             this.revealDistanceSquared = revealDistance * revealDistance;
             this.rehideBlocks = config.getBoolean("world-settings." + wn + ".rehide-blocks", config.getBoolean("world-settings.default.rehide-blocks", true));
-            this.rehideDistance = Math.max(config.getDouble("world-settings." + wn + ".rehide-distance", config.getDouble("world-settings.default.rehide-distance", 8.0)), 0.0);
+            double cfgRehide = config.getDouble("world-settings." + wn + ".rehide-distance", config.getDouble("world-settings.default.rehide-distance", 8.0));
+            this.rehideDistance = Math.max(cfgRehide, this.revealDistance + 1.0);
             this.rehideDistanceSquared = rehideDistance * rehideDistance;
         }
     }
@@ -135,6 +136,10 @@ public final class ProximityCallable implements Callable<Void> {
                         }
                     }
                 } else if (!hidden && rehideBlocks && distanceSquared >= rehideDistanceSquared) {
+                    if (plugin.isSpawnerDestroyedNear(chunk.getLevel().getWorld(), block)) {
+                        iterator.remove();
+                        continue;
+                    }
                     results.add(new Result(chunkBlocks, block, false));
                     blockHidden.setValue(true);
                 }

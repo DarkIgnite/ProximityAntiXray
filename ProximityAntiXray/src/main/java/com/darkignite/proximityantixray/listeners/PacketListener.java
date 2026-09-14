@@ -86,7 +86,7 @@ public final class PacketListener extends PacketAdapter {
                 playerDataMap.put(uniqueId, playerData);
             }
 
-            chunkBlocks = new ChunkBlocks(chunk, new HashMap<>(chunkBlocks.getBlocks()));
+            chunkBlocks = new ChunkBlocks(chunk, new java.util.concurrent.ConcurrentHashMap<>(chunkBlocks.getBlocks()));
             playerData.getChunks().put(chunkBlocks.getKey(), chunkBlocks);
 
             ChunkBlocks cb = chunkBlocks;
