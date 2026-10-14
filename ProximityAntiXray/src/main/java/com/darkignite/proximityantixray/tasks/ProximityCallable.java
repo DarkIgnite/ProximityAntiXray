@@ -140,6 +140,10 @@ public final class ProximityCallable implements Callable<Void> {
                         iterator.remove();
                         continue;
                     }
+                    if (plugin.isStructureDiscoveredAt(chunk.getLevel().getWorld(), block)) {
+                        iterator.remove();
+                        continue;
+                    }
                     results.add(new Result(chunkBlocks, block, false));
                     blockHidden.setValue(true);
                 }

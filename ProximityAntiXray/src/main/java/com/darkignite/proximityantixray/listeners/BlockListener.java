@@ -119,6 +119,8 @@ public final class BlockListener implements Listener {
         } else {
             removeTrackedBlock(world, breakPos);
         }
+
+        plugin.markStructureDiscoveredAt(world, breakPos);
     }
 
     @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
@@ -143,6 +145,33 @@ public final class BlockListener implements Listener {
                 }
             } catch (Throwable ignored) {
             }
+        }
+
+        plugin.markStructureDiscoveredAt(world, placePos);
+    }
+
+    @EventHandler(priority = EventPriority.MONITOR, ignoreCancelled = true)
+    public void onPlayerInteract(org.bukkit.event.player.PlayerInteractEvent event) {
+        if (!event.hasBlock()) {
+            return;
+        }
+        Block block = event.getClickedBlock();
+        if (block == null) {
+            return;
+        }
+        World world = block.getWorld();
+        if (!plugin.isEnabled(world)) {
+            return;
+        }
+
+        Material type = block.getType();
+        if (type == Material.CHEST || type == Material.TRAPPED_CHEST || type == Material.BARREL
+            || type == Material.DISPENSER || type == Material.DROPPER || type == Material.HOPPER
+            || type == Material.LEVER || type == Material.STONE_BUTTON || type == Material.OAK_BUTTON
+            || type == Material.STONE_PRESSURE_PLATE || type == Material.OAK_PRESSURE_PLATE
+            || type == Material.END_PORTAL_FRAME || type == Material.SUSPICIOUS_SAND || type == Material.SUSPICIOUS_GRAVEL) {
+            BlockPos clickedPos = new BlockPos(block.getX(), block.getY(), block.getZ());
+            plugin.markStructureDiscoveredAt(world, clickedPos);
         }
     }
 

@@ -23,13 +23,25 @@ world-settings:
     # Maximum number of hidden/proximity-tracked blocks per chunk (without dungeon blocks)
     max-blocks-per-chunk: 60
 
-    # Whether to completely fill the dungeon structure (air, cobblestone, chests, mossy cobble) with solid stone
-    # so Freecam / Spectator sees 100% solid underground rock instead of a hollow room!
+    # Legacy option maintained for backward compatibility
     fill-dungeon-with-stone: true
     # Radius around the spawner to conceal as solid stone (covers up to 9x9 dungeon rooms)
     dungeon-horizontal-radius: 4
     dungeon-vertical-radius-up: 4
     dungeon-vertical-radius-down: 2
+
+    # Structure Concealment (Anti-Freecam / Anti-ESP)
+    # Conceals structures as natural surrounding terrain (stone/deepslate/sandstone/bricks)
+    # until a player physically enters/approaches. Once a player interacts with a piece
+    # (places torches/blocks, breaks blocks, opens chests/levers), that piece permanently
+    # stops re-hiding so player bases and renovations are never ruined!
+    structures:
+      dungeons: true
+      mineshafts: true
+      desert-pyramids: true
+      jungle-temples: true
+      stronghold-portal-room: true
+      buried-treasure: true
 
     # Blocks that are hidden and revealed only by close physical proximity
     # Spawners, dungeon chests, and dungeon rooms are automatically protected by fill-dungeon-with-stone.

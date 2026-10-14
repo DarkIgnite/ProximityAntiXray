@@ -8,6 +8,7 @@ import net.minecraft.world.level.chunk.LevelChunk;
 public final class ChunkPacketInfoAntiXray extends ChunkPacketInfo<BlockState> implements Runnable {
     private final ChunkPacketBlockControllerAntiXray chunkPacketBlockControllerAntiXray;
     private LevelChunk[] nearbyChunks;
+    private java.util.List<net.minecraft.world.level.levelgen.structure.StructureStart> structureStarts;
 
     public ChunkPacketInfoAntiXray(ClientboundLevelChunkWithLightPacket chunkPacket, LevelChunk chunk, ChunkPacketBlockControllerAntiXray chunkPacketBlockControllerAntiXray) {
         super(chunkPacket, chunk);
@@ -20,6 +21,14 @@ public final class ChunkPacketInfoAntiXray extends ChunkPacketInfo<BlockState> i
 
     public void setNearbyChunks(LevelChunk... nearbyChunks) {
         this.nearbyChunks = nearbyChunks;
+    }
+
+    public java.util.List<net.minecraft.world.level.levelgen.structure.StructureStart> getStructureStarts() {
+        return structureStarts;
+    }
+
+    public void setStructureStarts(java.util.List<net.minecraft.world.level.levelgen.structure.StructureStart> structureStarts) {
+        this.structureStarts = structureStarts;
     }
 
     @Override

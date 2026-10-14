@@ -118,16 +118,12 @@ public final class UpdateBukkitRunnable extends BukkitRunnable implements Consum
                     chunkBlocks.getBlocks().remove(block);
                     continue; // Spawner near this block was destroyed or placed by player!
                 }
-
-                if (environment == Environment.NETHER) {
-                    blockState = Blocks.NETHERRACK.defaultBlockState();
-                } else if (environment == Environment.THE_END) {
-                    blockState = Blocks.END_STONE.defaultBlockState();
-                } else if (block.getY() < 0) {
-                    blockState = Blocks.DEEPSLATE.defaultBlockState();
-                } else {
-                    blockState = Blocks.STONE.defaultBlockState();
+                if (plugin.isStructureDiscoveredAt(world, block)) {
+                    chunkBlocks.getBlocks().remove(block);
+                    continue; // Structure piece discovered/intervened by player!
                 }
+
+                blockState = plugin.getDisguiseBlockState(serverLevel, block);
             }
 
             channel.write(new ClientboundBlockUpdatePacket(block, blockState));

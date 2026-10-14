@@ -50,6 +50,12 @@ import net.minecraft.world.level.chunk.LevelChunk;
 import net.minecraft.world.level.chunk.LevelChunkSection;
 import net.minecraft.world.level.chunk.MissingPaletteEntryException;
 import net.minecraft.world.level.chunk.Palette;
+import net.minecraft.world.level.levelgen.structure.BoundingBox;
+import net.minecraft.world.level.levelgen.structure.Structure;
+import net.minecraft.world.level.levelgen.structure.StructurePiece;
+import net.minecraft.world.level.levelgen.structure.StructureStart;
+import net.minecraft.world.level.levelgen.structure.StructureType;
+import net.minecraft.world.level.levelgen.structure.pieces.StructurePieceType;
 import org.bukkit.Bukkit;
 
 public final class ChunkPacketBlockControllerAntiXray extends ChunkPacketBlockController {
@@ -285,7 +291,14 @@ public final class ChunkPacketBlockControllerAntiXray extends ChunkPacketBlockCo
         int x = chunk.getPos().x;
         int z = chunk.getPos().z;
         Level level = chunk.getLevel();
-        ((ChunkPacketInfoAntiXray) chunkPacketInfo).setNearbyChunks(level.getChunkIfLoaded(x - 1, z), level.getChunkIfLoaded(x + 1, z), level.getChunkIfLoaded(x, z - 1), level.getChunkIfLoaded(x, z + 1));
+        ChunkPacketInfoAntiXray info = (ChunkPacketInfoAntiXray) chunkPacketInfo;
+        info.setNearbyChunks(level.getChunkIfLoaded(x - 1, z), level.getChunkIfLoaded(x + 1, z), level.getChunkIfLoaded(x, z - 1), level.getChunkIfLoaded(x, z + 1));
+        if (level instanceof ServerLevel serverLevel) {
+            try {
+                info.setStructureStarts(serverLevel.structureManager().startsForStructure(chunk.getPos(), s -> true));
+            } catch (Throwable ignored) {
+            }
+        }
         executor.execute((Runnable) chunkPacketInfo);
     }
 
@@ -508,7 +521,7 @@ public final class ChunkPacketBlockControllerAntiXray extends ChunkPacketBlockCo
             }
         }
 
-        if (plugin.isFillDungeonWithStone(chunk.getLevel().getWorld())) {
+        if (plugin.isConcealDungeons(chunk.getLevel().getWorld())) {
             for (net.minecraft.world.level.block.entity.BlockEntity be : chunk.getBlockEntities().values()) {
                 if (be instanceof net.minecraft.world.level.block.entity.SpawnerBlockEntity) {
                     concealDungeon(level, be.getBlockPos(), blocks, blockEntities);
@@ -532,6 +545,8 @@ public final class ChunkPacketBlockControllerAntiXray extends ChunkPacketBlockCo
                 }
             }
         }
+
+        concealStructures(level, chunk, chunkPacketInfoAntiXray.getStructureStarts(), blocks, blockEntities);
 
         if (plugin.isRunning()) {
             plugin.getPacketChunkBlocksCache().put(chunkPacketInfoAntiXray.getChunkPacket(), new ChunkBlocks(chunkPacketInfoAntiXray.getChunk(), new java.util.concurrent.ConcurrentHashMap<>(blocks)));
@@ -590,6 +605,300 @@ public final class ChunkPacketBlockControllerAntiXray extends ChunkPacketBlockCo
             || b instanceof net.minecraft.world.level.block.DispenserBlock
             || b instanceof net.minecraft.world.level.block.DropperBlock
             || b instanceof net.minecraft.world.level.block.WaterlilyBlock;
+    }
+
+    private boolean isPlayerBaseBlockMineshaft(BlockState bs) {
+        net.minecraft.world.level.block.Block b = bs.getBlock();
+        return b instanceof net.minecraft.world.level.block.BedBlock
+            || b instanceof net.minecraft.world.level.block.LanternBlock
+            || b instanceof net.minecraft.world.level.block.DoorBlock
+            || b instanceof net.minecraft.world.level.block.TrapDoorBlock
+            || b instanceof net.minecraft.world.level.block.CraftingTableBlock
+            || b instanceof net.minecraft.world.level.block.AbstractFurnaceBlock
+            || b instanceof net.minecraft.world.level.block.BarrelBlock
+            || b instanceof net.minecraft.world.level.block.SignBlock
+            || b instanceof net.minecraft.world.level.block.WallSignBlock
+            || b instanceof net.minecraft.world.level.block.CarpetBlock
+            || b instanceof net.minecraft.world.level.block.StainedGlassBlock
+            || b instanceof net.minecraft.world.level.block.AnvilBlock
+            || b instanceof net.minecraft.world.level.block.EnchantingTableBlock
+            || b instanceof net.minecraft.world.level.block.BrewingStandBlock
+            || b == Blocks.ENDER_CHEST
+            || b instanceof net.minecraft.world.level.block.ShulkerBoxBlock;
+    }
+
+    private boolean isMineshaftConcealable(BlockState bs) {
+        if (bs.isAir()) return true;
+        net.minecraft.world.level.block.Block b = bs.getBlock();
+        return b instanceof net.minecraft.world.level.block.BaseRailBlock
+            || b == Blocks.COBWEB
+            || b instanceof net.minecraft.world.level.block.FenceBlock
+            || b == Blocks.OAK_PLANKS || b == Blocks.DARK_OAK_PLANKS
+            || b == Blocks.TORCH || b == Blocks.WALL_TORCH
+            || b == Blocks.CHAIN
+            || b == Blocks.SPAWNER
+            || b == Blocks.CHEST;
+    }
+
+    private void concealStructures(Level level, LevelChunk chunk, List<StructureStart> starts, Map<? super BlockPos, ? super Boolean> blocks, Set<? super BlockPos> blockEntities) {
+        if (starts == null || starts.isEmpty()) return;
+        org.bukkit.World world = level.getWorld();
+        ChunkPos chunkPos = chunk.getPos();
+
+        for (StructureStart start : starts) {
+            if (!start.isValid()) continue;
+            Structure structure = start.getStructure();
+            StructureType<?> type = structure.type();
+
+            if (type == StructureType.MINESHAFT) {
+                if (!plugin.isConcealMineshafts(world)) continue;
+                for (StructurePiece piece : start.getPieces()) {
+                    concealMineshaftPiece(level, chunkPos, piece, blocks, blockEntities);
+                }
+            } else if (type == StructureType.DESERT_PYRAMID) {
+                if (!plugin.isConcealDesertPyramids(world)) continue;
+                for (StructurePiece piece : start.getPieces()) {
+                    concealDesertPyramidPiece(level, chunkPos, piece, blocks, blockEntities);
+                }
+            } else if (type == StructureType.JUNGLE_TEMPLE) {
+                if (!plugin.isConcealJungleTemples(world)) continue;
+                for (StructurePiece piece : start.getPieces()) {
+                    concealJungleTemplePiece(level, chunkPos, piece, blocks, blockEntities);
+                }
+            } else if (type == StructureType.STRONGHOLD) {
+                if (!plugin.isConcealStrongholdPortal(world)) continue;
+                for (StructurePiece piece : start.getPieces()) {
+                    if (piece.getType() == StructurePieceType.STRONGHOLD_PORTAL_ROOM) {
+                        concealStrongholdPortalRoom(level, chunkPos, piece, blocks, blockEntities);
+                    }
+                }
+            } else if (type == StructureType.BURIED_TREASURE) {
+                if (!plugin.isConcealBuriedTreasure(world)) continue;
+                for (StructurePiece piece : start.getPieces()) {
+                    concealBuriedTreasurePiece(level, chunkPos, piece, blocks, blockEntities);
+                }
+            }
+        }
+    }
+
+    private void concealMineshaftPiece(Level level, ChunkPos chunkPos, StructurePiece piece, Map<? super BlockPos, ? super Boolean> blocks, Set<? super BlockPos> blockEntities) {
+        BoundingBox bb = piece.getBoundingBox();
+        int cMinX = chunkPos.getMinBlockX(), cMaxX = chunkPos.getMaxBlockX();
+        int cMinZ = chunkPos.getMinBlockZ(), cMaxZ = chunkPos.getMaxBlockZ();
+        if (!bb.intersects(cMinX, cMinZ, cMaxX, cMaxZ)) {
+            return;
+        }
+        if (plugin.isPieceDiscovered(level.getWorld(), bb)) {
+            return;
+        }
+
+        int minX = Math.max(bb.minX(), cMinX);
+        int maxX = Math.min(bb.maxX(), cMaxX);
+        int minZ = Math.max(bb.minZ(), cMinZ);
+        int maxZ = Math.min(bb.maxZ(), cMaxZ);
+        int minY = Math.max(bb.minY(), level.getMinY());
+        int maxY = Math.min(bb.maxY(), level.getMaxY() - 1);
+
+        for (int x = minX; x <= maxX; x++) {
+            for (int z = minZ; z <= maxZ; z++) {
+                for (int y = minY; y <= maxY; y++) {
+                    BlockPos p = new BlockPos(x, y, z);
+                    BlockState bs = level.getBlockState(p);
+                    if (isPlayerBaseBlockMineshaft(bs)) {
+                        plugin.markPieceDiscovered(level.getWorld(), bb);
+                        return;
+                    }
+                }
+            }
+        }
+
+        for (int x = minX; x <= maxX; x++) {
+            for (int z = minZ; z <= maxZ; z++) {
+                for (int y = minY; y <= maxY; y++) {
+                    BlockPos p = new BlockPos(x, y, z);
+                    BlockState bs = level.getBlockState(p);
+                    if (isMineshaftConcealable(bs)) {
+                        blocks.put(p, true);
+                        if (bs.hasBlockEntity()) {
+                            blockEntities.add(p);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private void concealDesertPyramidPiece(Level level, ChunkPos chunkPos, StructurePiece piece, Map<? super BlockPos, ? super Boolean> blocks, Set<? super BlockPos> blockEntities) {
+        BoundingBox bb = piece.getBoundingBox();
+        int cx = (bb.minX() + bb.maxX()) / 2;
+        int cz = (bb.minZ() + bb.maxZ()) / 2;
+        int pitMinY = bb.minY();
+        int pitMaxY = Math.min(bb.minY() + 14, bb.maxY());
+        BoundingBox pitBB = new BoundingBox(cx - 3, pitMinY, cz - 3, cx + 3, pitMaxY, cz + 3);
+
+        int cMinX = chunkPos.getMinBlockX(), cMaxX = chunkPos.getMaxBlockX();
+        int cMinZ = chunkPos.getMinBlockZ(), cMaxZ = chunkPos.getMaxBlockZ();
+        if (!pitBB.intersects(cMinX, cMinZ, cMaxX, cMaxZ)) {
+            return;
+        }
+        if (plugin.isPieceDiscovered(level.getWorld(), bb) || plugin.isPieceDiscovered(level.getWorld(), pitBB)) {
+            return;
+        }
+
+        int minX = Math.max(pitBB.minX(), cMinX);
+        int maxX = Math.min(pitBB.maxX(), cMaxX);
+        int minZ = Math.max(pitBB.minZ(), cMinZ);
+        int maxZ = Math.min(pitBB.maxZ(), cMaxZ);
+        int minY = Math.max(pitBB.minY(), level.getMinY());
+        int maxY = Math.min(pitBB.maxY(), level.getMaxY() - 1);
+
+        for (int x = minX; x <= maxX; x++) {
+            for (int z = minZ; z <= maxZ; z++) {
+                for (int y = minY; y <= maxY; y++) {
+                    BlockPos p = new BlockPos(x, y, z);
+                    BlockState bs = level.getBlockState(p);
+                    if (isPlayerBaseBlockMineshaft(bs)) {
+                        plugin.markPieceDiscovered(level.getWorld(), bb);
+                        return;
+                    }
+                }
+            }
+        }
+
+        for (int x = minX; x <= maxX; x++) {
+            for (int z = minZ; z <= maxZ; z++) {
+                for (int y = minY; y <= maxY; y++) {
+                    BlockPos p = new BlockPos(x, y, z);
+                    BlockState bs = level.getBlockState(p);
+                    if (bs.isAir() || bs.is(Blocks.CHEST) || bs.is(Blocks.TNT) || bs.is(Blocks.STONE_PRESSURE_PLATE)
+                        || bs.is(Blocks.BLUE_TERRACOTTA) || bs.is(Blocks.ORANGE_TERRACOTTA) || bs.is(Blocks.SUSPICIOUS_SAND)) {
+                        blocks.put(p, true);
+                        if (bs.hasBlockEntity()) {
+                            blockEntities.add(p);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private void concealJungleTemplePiece(Level level, ChunkPos chunkPos, StructurePiece piece, Map<? super BlockPos, ? super Boolean> blocks, Set<? super BlockPos> blockEntities) {
+        BoundingBox bb = piece.getBoundingBox();
+        int minY = bb.minY();
+        int maxY = Math.min(bb.minY() + 6, bb.maxY());
+        BoundingBox basementBB = new BoundingBox(bb.minX(), minY, bb.minZ(), bb.maxX(), maxY, bb.maxZ());
+
+        int cMinX = chunkPos.getMinBlockX(), cMaxX = chunkPos.getMaxBlockX();
+        int cMinZ = chunkPos.getMinBlockZ(), cMaxZ = chunkPos.getMaxBlockZ();
+        if (!basementBB.intersects(cMinX, cMinZ, cMaxX, cMaxZ)) {
+            return;
+        }
+        if (plugin.isPieceDiscovered(level.getWorld(), bb) || plugin.isPieceDiscovered(level.getWorld(), basementBB)) {
+            return;
+        }
+
+        int minX = Math.max(basementBB.minX(), cMinX);
+        int maxX = Math.min(basementBB.maxX(), cMaxX);
+        int minZ = Math.max(basementBB.minZ(), cMinZ);
+        int maxZ = Math.min(basementBB.maxZ(), cMaxZ);
+        int bMinY = Math.max(basementBB.minY(), level.getMinY());
+        int bMaxY = Math.min(basementBB.maxY(), level.getMaxY() - 1);
+
+        for (int x = minX; x <= maxX; x++) {
+            for (int z = minZ; z <= maxZ; z++) {
+                for (int y = bMinY; y <= bMaxY; y++) {
+                    BlockPos p = new BlockPos(x, y, z);
+                    BlockState bs = level.getBlockState(p);
+                    if (isPlayerBaseBlockMineshaft(bs)) {
+                        plugin.markPieceDiscovered(level.getWorld(), bb);
+                        return;
+                    }
+                }
+            }
+        }
+
+        for (int x = minX; x <= maxX; x++) {
+            for (int z = minZ; z <= maxZ; z++) {
+                for (int y = bMinY; y <= bMaxY; y++) {
+                    BlockPos p = new BlockPos(x, y, z);
+                    BlockState bs = level.getBlockState(p);
+                    if (bs.isAir() || bs.is(Blocks.CHEST) || bs.is(Blocks.DISPENSER) || bs.is(Blocks.LEVER)
+                        || bs.is(Blocks.REDSTONE_WIRE) || bs.is(Blocks.REPEATER) || bs.is(Blocks.PISTON)
+                        || bs.is(Blocks.STICKY_PISTON) || bs.is(Blocks.TRIPWIRE) || bs.is(Blocks.TRIPWIRE_HOOK)) {
+                        blocks.put(p, true);
+                        if (bs.hasBlockEntity()) {
+                            blockEntities.add(p);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private void concealStrongholdPortalRoom(Level level, ChunkPos chunkPos, StructurePiece piece, Map<? super BlockPos, ? super Boolean> blocks, Set<? super BlockPos> blockEntities) {
+        BoundingBox bb = piece.getBoundingBox();
+        int cMinX = chunkPos.getMinBlockX(), cMaxX = chunkPos.getMaxBlockX();
+        int cMinZ = chunkPos.getMinBlockZ(), cMaxZ = chunkPos.getMaxBlockZ();
+        if (!bb.intersects(cMinX, cMinZ, cMaxX, cMaxZ)) {
+            return;
+        }
+        if (plugin.isPieceDiscovered(level.getWorld(), bb)) {
+            return;
+        }
+
+        int minX = Math.max(bb.minX(), cMinX);
+        int maxX = Math.min(bb.maxX(), cMaxX);
+        int minZ = Math.max(bb.minZ(), cMinZ);
+        int maxZ = Math.min(bb.maxZ(), cMaxZ);
+        int minY = Math.max(bb.minY(), level.getMinY());
+        int maxY = Math.min(bb.maxY(), level.getMaxY() - 1);
+
+        for (int x = minX; x <= maxX; x++) {
+            for (int z = minZ; z <= maxZ; z++) {
+                for (int y = minY; y <= maxY; y++) {
+                    BlockPos p = new BlockPos(x, y, z);
+                    BlockState bs = level.getBlockState(p);
+                    if (isPlayerBaseBlockMineshaft(bs)) {
+                        plugin.markPieceDiscovered(level.getWorld(), bb);
+                        return;
+                    }
+                }
+            }
+        }
+
+        for (int x = minX; x <= maxX; x++) {
+            for (int z = minZ; z <= maxZ; z++) {
+                for (int y = minY; y <= maxY; y++) {
+                    BlockPos p = new BlockPos(x, y, z);
+                    BlockState bs = level.getBlockState(p);
+                    if (bs.isAir() || bs.is(Blocks.END_PORTAL_FRAME) || bs.is(Blocks.END_PORTAL) || bs.is(Blocks.LAVA)
+                        || bs.is(Blocks.SPAWNER) || bs.is(Blocks.IRON_BARS)) {
+                        blocks.put(p, true);
+                        if (bs.hasBlockEntity()) {
+                            blockEntities.add(p);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private void concealBuriedTreasurePiece(Level level, ChunkPos chunkPos, StructurePiece piece, Map<? super BlockPos, ? super Boolean> blocks, Set<? super BlockPos> blockEntities) {
+        BoundingBox bb = piece.getBoundingBox();
+        BlockPos chestPos = new BlockPos(bb.minX(), bb.minY(), bb.minZ());
+        if (chestPos.getX() < chunkPos.getMinBlockX() || chestPos.getX() > chunkPos.getMaxBlockX() ||
+            chestPos.getZ() < chunkPos.getMinBlockZ() || chestPos.getZ() > chunkPos.getMaxBlockZ()) {
+            return;
+        }
+        if (plugin.isPieceDiscovered(level.getWorld(), bb)) {
+            return;
+        }
+
+        BlockState bs = level.getBlockState(chestPos);
+        if (bs.is(Blocks.CHEST)) {
+            blocks.put(chestPos, true);
+            blockEntities.add(chestPos);
+        }
     }
 
     private void concealDungeon(Level level, BlockPos spawnerPos, Map<? super BlockPos, ? super Boolean> blocks, Set<? super BlockPos> blockEntities) {

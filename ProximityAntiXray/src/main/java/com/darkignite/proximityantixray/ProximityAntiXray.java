@@ -37,9 +37,15 @@ import io.papermc.paper.configuration.type.EngineMode;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.protocol.game.ClientboundBlockUpdatePacket;
 import net.minecraft.network.protocol.game.ClientboundLevelChunkWithLightPacket;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.network.ServerGamePacketListenerImpl;
+import net.minecraft.world.level.ChunkPos;
+import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.level.levelgen.structure.BoundingBox;
+import net.minecraft.world.level.levelgen.structure.StructurePiece;
+import net.minecraft.world.level.levelgen.structure.StructureStart;
 
 public final class ProximityAntiXray extends JavaPlugin {
     private boolean folia = false;
@@ -49,6 +55,7 @@ public final class ProximityAntiXray extends JavaPlugin {
     private final ConcurrentMap<UUID, PlayerData> playerData = new ConcurrentHashMap<>();
     private final java.util.Set<BlockPos> destroyedSpawners = ConcurrentHashMap.newKeySet();
     private final java.util.Set<BlockPos> playerPlacedSpawners = ConcurrentHashMap.newKeySet();
+    private final ConcurrentMap<UUID, ConcurrentHashMap<Long, BoundingBox>> discoveredBoxesByWorld = new ConcurrentHashMap<>();
     private org.bukkit.NamespacedKey playerPlacedKey;
     private ExecutorService executorService;
     private Timer timer;
@@ -60,6 +67,7 @@ public final class ProximityAntiXray extends JavaPlugin {
         saveDefaultConfig();
         FileConfiguration config = getConfig();
         config.options().copyDefaults(true);
+        loadDiscoveredData();
 
         try {
             Class.forName("io.papermc.paper.threadedregions.RegionizedServer");
@@ -114,6 +122,7 @@ public final class ProximityAntiXray extends JavaPlugin {
 
     @Override
     public void onDisable() {
+        saveDiscoveredData();
         Throwable throwable = null;
 
         try {
@@ -157,6 +166,7 @@ public final class ProximityAntiXray extends JavaPlugin {
                 playerData.clear();
                 destroyedSpawners.clear();
                 playerPlacedSpawners.clear();
+                discoveredBoxesByWorld.clear();
             }
         } catch (Throwable t) {
             if (throwable == null) {
@@ -217,29 +227,100 @@ public final class ProximityAntiXray extends JavaPlugin {
         return false;
     }
 
-    public boolean isFillDungeonWithStone(World world) {
+    public boolean isConcealDungeons(World world) {
         FileConfiguration config = getConfig();
-        return config.getBoolean("world-settings." + world.getName() + ".fill-dungeon-with-stone", config.getBoolean("world-settings.default.fill-dungeon-with-stone", true));
+        String prefix = "world-settings." + world.getName() + ".";
+        String def = "world-settings.default.";
+        return config.getBoolean(prefix + "structures.dungeons",
+               config.getBoolean(def + "structures.dungeons",
+               config.getBoolean(prefix + "fill-dungeon-with-stone",
+               config.getBoolean(def + "fill-dungeon-with-stone", true))));
+    }
+
+    public boolean isFillDungeonWithStone(World world) {
+        return isConcealDungeons(world);
+    }
+
+    public boolean isConcealMineshafts(World world) {
+        FileConfiguration config = getConfig();
+        String prefix = "world-settings." + world.getName() + ".";
+        String def = "world-settings.default.";
+        return config.getBoolean(prefix + "structures.mineshafts",
+               config.getBoolean(def + "structures.mineshafts", true));
+    }
+
+    public boolean isConcealDesertPyramids(World world) {
+        FileConfiguration config = getConfig();
+        String prefix = "world-settings." + world.getName() + ".";
+        String def = "world-settings.default.";
+        return config.getBoolean(prefix + "structures.desert-pyramids",
+               config.getBoolean(def + "structures.desert-pyramids", true));
+    }
+
+    public boolean isConcealJungleTemples(World world) {
+        FileConfiguration config = getConfig();
+        String prefix = "world-settings." + world.getName() + ".";
+        String def = "world-settings.default.";
+        return config.getBoolean(prefix + "structures.jungle-temples",
+               config.getBoolean(def + "structures.jungle-temples", true));
+    }
+
+    public boolean isConcealStrongholdPortal(World world) {
+        FileConfiguration config = getConfig();
+        String prefix = "world-settings." + world.getName() + ".";
+        String def = "world-settings.default.";
+        return config.getBoolean(prefix + "structures.stronghold-portal-room",
+               config.getBoolean(def + "structures.stronghold-portal-room", true));
+    }
+
+    public boolean isConcealBuriedTreasure(World world) {
+        FileConfiguration config = getConfig();
+        String prefix = "world-settings." + world.getName() + ".";
+        String def = "world-settings.default.";
+        return config.getBoolean(prefix + "structures.buried-treasure",
+               config.getBoolean(def + "structures.buried-treasure", true));
     }
 
     public int getDungeonHorizontalRadius(World world) {
         FileConfiguration config = getConfig();
-        return config.getInt("world-settings." + world.getName() + ".dungeon-horizontal-radius", config.getInt("world-settings.default.dungeon-horizontal-radius", 3));
+        return config.getInt("world-settings." + world.getName() + ".dungeon-horizontal-radius", config.getInt("world-settings.default.dungeon-horizontal-radius", 4));
     }
 
     public int getDungeonVerticalRadiusUp(World world) {
         FileConfiguration config = getConfig();
-        return config.getInt("world-settings." + world.getName() + ".dungeon-vertical-radius-up", config.getInt("world-settings.default.dungeon-vertical-radius-up", 3));
+        return config.getInt("world-settings." + world.getName() + ".dungeon-vertical-radius-up", config.getInt("world-settings.default.dungeon-vertical-radius-up", 4));
     }
 
     public int getDungeonVerticalRadiusDown(World world) {
         FileConfiguration config = getConfig();
-        return config.getInt("world-settings." + world.getName() + ".dungeon-vertical-radius-down", config.getInt("world-settings.default.dungeon-vertical-radius-down", 1));
+        return config.getInt("world-settings." + world.getName() + ".dungeon-vertical-radius-down", config.getInt("world-settings.default.dungeon-vertical-radius-down", 2));
+    }
+
+    public BlockState getDisguiseBlockState(ServerLevel serverLevel, BlockPos pos) {
+        if (serverLevel.dimension() == Level.NETHER) {
+            return Blocks.NETHERRACK.defaultBlockState();
+        }
+        if (serverLevel.dimension() == Level.END) {
+            return Blocks.END_STONE.defaultBlockState();
+        }
+
+        BlockState below = serverLevel.getBlockState(pos.below());
+        if (below.is(Blocks.SANDSTONE) || below.is(Blocks.SAND) || below.is(Blocks.RED_SANDSTONE)) {
+            return below.is(Blocks.RED_SANDSTONE) ? Blocks.RED_SANDSTONE.defaultBlockState() : Blocks.SANDSTONE.defaultBlockState();
+        }
+        if (below.is(Blocks.STONE_BRICKS) || below.is(Blocks.CRACKED_STONE_BRICKS) || below.is(Blocks.MOSSY_STONE_BRICKS)) {
+            return pos.getY() < 0 ? Blocks.DEEPSLATE_BRICKS.defaultBlockState() : Blocks.STONE_BRICKS.defaultBlockState();
+        }
+        if (below.is(Blocks.COBBLESTONE) || below.is(Blocks.MOSSY_COBBLESTONE)) {
+            return Blocks.COBBLESTONE.defaultBlockState();
+        }
+
+        return pos.getY() < 0 ? Blocks.DEEPSLATE.defaultBlockState() : Blocks.STONE.defaultBlockState();
     }
 
     public void sendInitialDungeonConceal(Player player, ChunkBlocks chunkBlocks) {
         World world = player.getWorld();
-        if (!isEnabled(world) || !isFillDungeonWithStone(world)) {
+        if (!isEnabled(world)) {
             return;
         }
 
@@ -257,8 +338,9 @@ public final class ProximityAntiXray extends JavaPlugin {
         double py = player.getLocation().getY();
         double pz = player.getLocation().getZ();
 
-        double revealDist = getConfig().getDouble("world-settings." + world.getName() + ".reveal-distance", getConfig().getDouble("world-settings.default.reveal-distance", 6.0));
+        double revealDist = getConfig().getDouble("world-settings." + world.getName() + ".reveal-distance", getConfig().getDouble("world-settings.default.reveal-distance", 8.0));
         double revealDistSq = revealDist * revealDist;
+        ServerLevel serverLevel = ((CraftWorld) world).getHandle();
 
         int count = 0;
         for (java.util.Map.Entry<BlockPos, Boolean> entry : chunkBlocks.getBlocks().entrySet()) {
@@ -268,7 +350,7 @@ public final class ProximityAntiXray extends JavaPlugin {
                 double dy = py - (pos.getY() + 0.5);
                 double dz = pz - (pos.getZ() + 0.5);
                 if (dx * dx + dy * dy + dz * dz > revealDistSq) {
-                    BlockState fakeState = pos.getY() < 0 ? Blocks.DEEPSLATE.defaultBlockState() : Blocks.STONE.defaultBlockState();
+                    BlockState fakeState = getDisguiseBlockState(serverLevel, pos);
                     channel.write(new ClientboundBlockUpdatePacket(pos, fakeState));
                     count++;
                 }
@@ -277,6 +359,176 @@ public final class ProximityAntiXray extends JavaPlugin {
 
         if (count > 0) {
             channel.flush();
+        }
+    }
+
+    public static long getPieceKey(BoundingBox bb) {
+        return BlockPos.asLong(bb.minX(), bb.minY(), bb.minZ());
+    }
+
+    public boolean isPieceDiscovered(World world, BoundingBox bb) {
+        ConcurrentHashMap<Long, BoundingBox> map = discoveredBoxesByWorld.get(world.getUID());
+        if (map == null) return false;
+        return map.containsKey(getPieceKey(bb));
+    }
+
+    public void markPieceDiscovered(World world, BoundingBox bb) {
+        ConcurrentHashMap<Long, BoundingBox> map = discoveredBoxesByWorld.computeIfAbsent(world.getUID(), k -> new ConcurrentHashMap<>());
+        map.put(getPieceKey(bb), bb);
+    }
+
+    public boolean isStructureDiscoveredAt(World world, BlockPos pos) {
+        ConcurrentHashMap<Long, BoundingBox> map = discoveredBoxesByWorld.get(world.getUID());
+        if (map == null || map.isEmpty()) return false;
+        for (BoundingBox bb : map.values()) {
+            if (bb.isInside(pos)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    public void markStructureDiscoveredAt(World world, BlockPos pos) {
+        if (!isEnabled(world)) return;
+        try {
+            ServerLevel serverLevel = ((CraftWorld) world).getHandle();
+            ChunkPos chunkPos = new ChunkPos(pos);
+            java.util.List<StructureStart> starts = serverLevel.structureManager().startsForStructure(chunkPos, s -> true);
+            if (starts.isEmpty()) return;
+
+            for (StructureStart start : starts) {
+                if (!start.isValid()) continue;
+                for (StructurePiece piece : start.getPieces()) {
+                    BoundingBox bb = piece.getBoundingBox();
+                    if (bb.isInside(pos)) {
+                        long key = getPieceKey(bb);
+                        ConcurrentHashMap<Long, BoundingBox> map = discoveredBoxesByWorld.computeIfAbsent(world.getUID(), k -> new ConcurrentHashMap<>());
+                        if (map.putIfAbsent(key, bb) == null) {
+                            unconcealBoundingBox(world, bb);
+                        }
+                    }
+                }
+            }
+        } catch (Throwable ignored) {
+        }
+    }
+
+    public void unconcealBoundingBox(World world, BoundingBox bb) {
+        ServerLevel serverLevel = ((CraftWorld) world).getHandle();
+        int minX = bb.minX(), maxX = bb.maxX();
+        int minY = bb.minY(), maxY = bb.maxY();
+        int minZ = bb.minZ(), maxZ = bb.maxZ();
+
+        for (ChunkBlocks cb : packetChunkBlocksCache.values()) {
+            if (cb.getChunk() != null && cb.getChunk().getLevel().getWorld().equals(world)) {
+                cb.getBlocks().keySet().removeIf(p ->
+                    p.getX() >= minX && p.getX() <= maxX &&
+                    p.getY() >= minY && p.getY() <= maxY &&
+                    p.getZ() >= minZ && p.getZ() <= maxZ
+                );
+            }
+        }
+
+        for (Player player : world.getPlayers()) {
+            PlayerData data = playerData.get(player.getUniqueId());
+            if (data == null) continue;
+
+            data.getResults().removeIf(r -> {
+                BlockPos p = r.getBlock();
+                return p.getX() >= minX && p.getX() <= maxX &&
+                       p.getY() >= minY && p.getY() <= maxY &&
+                       p.getZ() >= minZ && p.getZ() <= maxZ;
+            });
+
+            ServerGamePacketListenerImpl conn = ((CraftPlayer) player).getHandle().connection;
+            Channel channel = (conn != null && !conn.processedDisconnect) ? conn.connection.channel : null;
+            boolean written = false;
+
+            for (ChunkBlocks cb : data.getChunks().values()) {
+                java.util.Iterator<java.util.Map.Entry<BlockPos, Boolean>> it = cb.getBlocks().entrySet().iterator();
+                while (it.hasNext()) {
+                    BlockPos p = it.next().getKey();
+                    if (p.getX() >= minX && p.getX() <= maxX &&
+                        p.getY() >= minY && p.getY() <= maxY &&
+                        p.getZ() >= minZ && p.getZ() <= maxZ) {
+                        it.remove();
+                        if (channel != null && channel.isOpen()) {
+                            channel.write(new ClientboundBlockUpdatePacket(p, serverLevel.getBlockState(p)));
+                            written = true;
+                        }
+                    }
+                }
+            }
+            if (written && channel != null) {
+                channel.flush();
+            }
+        }
+    }
+
+    private void loadDiscoveredData() {
+        try {
+            java.io.File file = new java.io.File(getDataFolder(), "discovered_data.yml");
+            if (!file.exists()) return;
+            org.bukkit.configuration.file.YamlConfiguration data = org.bukkit.configuration.file.YamlConfiguration.loadConfiguration(file);
+
+            java.util.List<String> spawners = data.getStringList("destroyed-spawners");
+            for (String s : spawners) {
+                String[] parts = s.split(",");
+                if (parts.length == 3) {
+                    try {
+                        destroyedSpawners.add(new BlockPos(Integer.parseInt(parts[0]), Integer.parseInt(parts[1]), Integer.parseInt(parts[2])));
+                    } catch (NumberFormatException ignored) {}
+                }
+            }
+
+            org.bukkit.configuration.ConfigurationSection sec = data.getConfigurationSection("discovered-pieces");
+            if (sec != null) {
+                for (String worldUidStr : sec.getKeys(false)) {
+                    try {
+                        UUID worldUid = UUID.fromString(worldUidStr);
+                        ConcurrentHashMap<Long, BoundingBox> map = discoveredBoxesByWorld.computeIfAbsent(worldUid, k -> new ConcurrentHashMap<>());
+                        java.util.List<String> boxList = sec.getStringList(worldUidStr);
+                        for (String bStr : boxList) {
+                            String[] p = bStr.split(",");
+                            if (p.length == 6) {
+                                BoundingBox bb = new BoundingBox(
+                                    Integer.parseInt(p[0]), Integer.parseInt(p[1]), Integer.parseInt(p[2]),
+                                    Integer.parseInt(p[3]), Integer.parseInt(p[4]), Integer.parseInt(p[5])
+                                );
+                                map.put(getPieceKey(bb), bb);
+                            }
+                        }
+                    } catch (IllegalArgumentException ignored) {}
+                }
+            }
+        } catch (Throwable ignored) {
+        }
+    }
+
+    private void saveDiscoveredData() {
+        try {
+            if (!getDataFolder().exists()) {
+                getDataFolder().mkdirs();
+            }
+            java.io.File file = new java.io.File(getDataFolder(), "discovered_data.yml");
+            org.bukkit.configuration.file.YamlConfiguration data = new org.bukkit.configuration.file.YamlConfiguration();
+
+            java.util.List<String> spawners = new java.util.ArrayList<>();
+            for (BlockPos p : destroyedSpawners) {
+                spawners.add(p.getX() + "," + p.getY() + "," + p.getZ());
+            }
+            data.set("destroyed-spawners", spawners);
+
+            for (java.util.Map.Entry<UUID, ConcurrentHashMap<Long, BoundingBox>> entry : discoveredBoxesByWorld.entrySet()) {
+                java.util.List<String> boxes = new java.util.ArrayList<>();
+                for (BoundingBox bb : entry.getValue().values()) {
+                    boxes.add(bb.minX() + "," + bb.minY() + "," + bb.minZ() + "," + bb.maxX() + "," + bb.maxY() + "," + bb.maxZ());
+                }
+                data.set("discovered-pieces." + entry.getKey().toString(), boxes);
+            }
+
+            data.save(file);
+        } catch (Throwable ignored) {
         }
     }
 
