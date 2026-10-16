@@ -308,6 +308,9 @@ public final class ProximityAntiXray extends JavaPlugin {
         if (below.is(Blocks.SANDSTONE) || below.is(Blocks.SAND) || below.is(Blocks.RED_SANDSTONE)) {
             return below.is(Blocks.RED_SANDSTONE) ? Blocks.RED_SANDSTONE.defaultBlockState() : Blocks.SANDSTONE.defaultBlockState();
         }
+        if (below.is(Blocks.TERRACOTTA) || below.getBlock().getDescriptionId().contains("terracotta") || below.is(Blocks.RED_SAND)) {
+            return below.is(Blocks.RED_SAND) ? Blocks.RED_SANDSTONE.defaultBlockState() : below;
+        }
         if (below.is(Blocks.STONE_BRICKS) || below.is(Blocks.CRACKED_STONE_BRICKS) || below.is(Blocks.MOSSY_STONE_BRICKS)) {
             return pos.getY() < 0 ? Blocks.DEEPSLATE_BRICKS.defaultBlockState() : Blocks.STONE_BRICKS.defaultBlockState();
         }

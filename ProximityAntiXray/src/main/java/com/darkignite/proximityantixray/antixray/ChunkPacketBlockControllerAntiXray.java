@@ -681,6 +681,33 @@ public final class ChunkPacketBlockControllerAntiXray extends ChunkPacketBlockCo
         }
     }
 
+    private boolean isMineshaftPieceUnderground(Level level, BoundingBox bb) {
+        int minX = bb.minX(), maxX = bb.maxX();
+        int minZ = bb.minZ(), maxZ = bb.maxZ();
+        int cx = (minX + maxX) / 2;
+        int cz = (minZ + maxZ) / 2;
+        int maxY = bb.maxY();
+
+        BlockPos[] testPositions = new BlockPos[] {
+            new BlockPos(cx, maxY + 1, cz),
+            new BlockPos(minX, maxY + 1, minZ),
+            new BlockPos(maxX, maxY + 1, maxZ),
+            new BlockPos(minX, maxY + 1, maxZ),
+            new BlockPos(maxX, maxY + 1, minZ)
+        };
+
+        for (BlockPos p : testPositions) {
+            if (level.canSeeSky(p)) {
+                return false;
+            }
+            int surfaceY = level.getHeight(net.minecraft.world.level.levelgen.Heightmap.Types.WORLD_SURFACE, p.getX(), p.getZ());
+            if (surfaceY <= maxY + 2) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     private void concealMineshaftPiece(Level level, ChunkPos chunkPos, StructurePiece piece, Map<? super BlockPos, ? super Boolean> blocks, Set<? super BlockPos> blockEntities) {
         BoundingBox bb = piece.getBoundingBox();
         int cMinX = chunkPos.getMinBlockX(), cMaxX = chunkPos.getMaxBlockX();
@@ -689,6 +716,10 @@ public final class ChunkPacketBlockControllerAntiXray extends ChunkPacketBlockCo
             return;
         }
         if (plugin.isPieceDiscovered(level.getWorld(), bb)) {
+            return;
+        }
+
+        if (!isMineshaftPieceUnderground(level, bb)) {
             return;
         }
 
@@ -714,8 +745,18 @@ public final class ChunkPacketBlockControllerAntiXray extends ChunkPacketBlockCo
 
         for (int x = minX; x <= maxX; x++) {
             for (int z = minZ; z <= maxZ; z++) {
+                int surfaceY = level.getHeight(net.minecraft.world.level.levelgen.Heightmap.Types.WORLD_SURFACE, x, z);
+                if (bb.maxY() >= surfaceY - 1) {
+                    continue;
+                }
                 for (int y = minY; y <= maxY; y++) {
+                    if (y >= surfaceY - 1) {
+                        continue;
+                    }
                     BlockPos p = new BlockPos(x, y, z);
+                    if (level.canSeeSky(p) || level.canSeeSky(new BlockPos(x, bb.maxY() + 1, z))) {
+                        continue;
+                    }
                     BlockState bs = level.getBlockState(p);
                     if (isMineshaftConcealable(bs)) {
                         blocks.put(p, true);
